@@ -1,0 +1,2 @@
+python train.py --id median_noshuffle --train_root_dir /mnt/home_6T/sunset/zind --valid_root_dir /mnt/home_6T/sunset/zind --no_flip --no_rotate --no_gamma --batch_size_train 2 > logs/median_noshuffle.log
+python inference.py --pth ckpt/2021/best_valid_32.pth --img_glob '/mnt/home_6T/public/joshua/zind/val/*/label_cor_noocc/*.txt' --output_dir val_out 
