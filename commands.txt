@@ -1,4 +1,0 @@
-python train.py --id median_noshuffle --train_root_dir /mnt/home_6T/sunset/zind --valid_root_dir /mnt/home_6T/sunset/zind --no_flip --no_rotate --no_gamma --batch_size_train 2 > logs/median_noshuffle.log
-python inference.py --pth ckpt/2021/best_valid_32.pth --img_glob '/mnt/home_6T/public/joshua/zind/val/*/label_cor_noocc/*.txt' --output_dir val_out 
-python semi_train.py --id sup20_only --train_root_dir /mnt/home_6T/sunset/zind --valid_root_dir /mnt/home_6T/sunset/zind --batch_size_train 2 > logs/sup20_only.log
-python sup_train.py --id pano2d3d_mp3d --train_root_dir /mnt/home_6T/sunset/mp3d_layout/train_no_occ --valid_root_dir /mnt/home_6T/sunset/mp3d_layout/valid_no_occ > logs/scratch3.log
