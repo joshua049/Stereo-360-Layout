@@ -182,7 +182,17 @@ class HorizonNet(nn.Module):
         self.out_scale = 8
         self.step_cols = 4
         self.rnn_hidden_size = 512
-        self.out_channel = 3
+
+        from_official = False
+        if from_official:
+            self.out_channel = 3
+            self.has_sigmoid = False
+            self.scale = 2 / np.pi
+        else:
+            self.out_channel = 2
+            self.has_sigmoid = True
+            self.scale = 1.
+            # self.scale = np.pi / 2.
 
         # Encoder
         if backbone.startswith('res'):
@@ -262,15 +272,17 @@ class HorizonNet(nn.Module):
             output, hidden = self.bi_rnn(feature)  # [seq_len, b, num_directions * hidden_size]
             output = self.drop_out(output)
             output = self.linear(output)  # [seq_len, b, 3 * step_cols]
-            output = self.sigmoid(output)
+            if self.has_sigmoid:
+                output = self.sigmoid(output)
             output = output.view(output.shape[0], output.shape[1], self.out_channel, self.step_cols)  # [seq_len, b, 3, step_cols]
             output = output.permute(1, 2, 0, 3)  # [b, 3, seq_len, step_cols]
-            output = output.contiguous().view(output.shape[0], self.out_channel, -1)  # [b, 3, seq_len*step_cols]
+            output = output.contiguous().view(output.shape[0], self.out_channel, -1)  # [b, 3, seq_len*step_cols]            
             # output[:, 0, :] *= -1
-            if self.out_channel == 3:
-                output[:, 1, :] *= -1
-            else:
-                output[:, 0, :] *= -1
+            if self.has_sigmoid:
+                if self.out_channel == 3:
+                    output[:, 1, :] *= -1
+                else:
+                    output[:, 0, :] *= -1
         else:
             feature = feature.permute(0, 2, 1)  # [b, w, c*h]
             output = self.linear(feature)  # [b, w, 3 * step_cols]
@@ -278,14 +290,15 @@ class HorizonNet(nn.Module):
             output = output.permute(0, 2, 1, 3)  # [b, 3, w, step_cols]
             output = output.contiguous().view(output.shape[0], 3, -1)  # [b, 3, w*step_cols]
 
+        output = output * self.scale
         if self.out_channel == 3:
         
             # output.shape => B x 3 x W
             cor = output[:, :1]  # B x 1 x W
             bon = output[:, 1:]  # B x 2 x W
 
-            # return bon
-            return bon, cor
+            return bon
+            # return bon, cor
         else:        
             return output
         

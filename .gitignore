@@ -4,4 +4,9 @@ ckpt
 logs
 inf_out
 val_out
+pics
+*.log
+*.csv
+*.json
 .ipynb_checkpoints/
+backup

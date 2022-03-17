@@ -9,6 +9,7 @@ from scipy.spatial.distance import cdist
 import glob
 import json
 import itertools
+import pandas as pd
 
 import torch
 import torch.utils.data as data
@@ -21,16 +22,27 @@ class PanoCorBonDataset(data.Dataset):
     See README.md for how to prepare the dataset.
     '''
 
-    def __init__(self, root_dir,
+    def __init__(self, root_dir, subject=None,
                  flip=False, rotate=False, gamma=False, stretch=False,
                  p_base=0.96, max_stretch=2.0,
-                 normcor=False, return_cor=False, return_path=False):
+                 normcor=False, return_cor=False, return_path=False, 
+                 start=None, end=None, labeled=True, teach=False):
         self.img_dir = os.path.join(root_dir, 'img')
         self.cor_dir = os.path.join(root_dir, 'label_cor')
-        self.img_fnames = sorted([
-            fname for fname in os.listdir(self.img_dir)
-            if fname.endswith('.jpg') or fname.endswith('.png')
-        ])
+        
+        if end in [50, 100, 200, 400]:
+            # split_data = pd.read_csv('matterport_train_splits.csv')
+            split_data = pd.read_csv('active_select_splits.csv')            
+            self.img_fnames = sorted([
+                f'{fname}.png' for fname in split_data['fileid'][split_data[str(end)]==int(labeled)]
+            ])
+        else:
+            all_img_fnames = sorted([
+                fname for fname in os.listdir(self.img_dir)
+                if fname.endswith('.jpg') or fname.endswith('.png')
+            ])
+            self.img_fnames = all_img_fnames[start:end]
+
         self.txt_fnames = ['%s.txt' % fname[:-4] for fname in self.img_fnames]
         self.flip = flip
         self.rotate = rotate
@@ -41,6 +53,7 @@ class PanoCorBonDataset(data.Dataset):
         self.normcor = normcor
         self.return_cor = return_cor
         self.return_path = return_path
+        self.teach = teach
 
         self._check_dataset()
 
@@ -56,7 +69,7 @@ class PanoCorBonDataset(data.Dataset):
         # Read image
         img_path = os.path.join(self.img_dir,
                                 self.img_fnames[idx])
-        img = np.array(Image.open(img_path), np.float32)[..., :3] / 255.
+        img = np.array(Image.open(img_path), np.float32)[..., :3] / 255.             
         H, W = img.shape[:2]
 
         # Read ground truth corners
@@ -71,7 +84,7 @@ class PanoCorBonDataset(data.Dataset):
             occlusion = find_occlusion(cor[::2].copy()).repeat(2)
             assert (np.abs(cor[0::2, 0] - cor[1::2, 0]) > W/100).sum() == 0, img_path
             assert (cor[0::2, 1] > cor[1::2, 1]).sum() == 0, img_path
-
+       
         # Stretch augmentation
         if self.stretch:
             xmin, ymin, xmax, ymax = cor2xybound(cor)
@@ -103,6 +116,7 @@ class PanoCorBonDataset(data.Dataset):
             bon = np.roll(bon, dx, axis=1)
             cor[:, 0] = (cor[:, 0] + dx) % img.shape[1]
 
+        original_img = img.copy()           
         # Random gamma augmentation
         if self.gamma:
             p = np.random.uniform(1, 2)
@@ -128,11 +142,14 @@ class PanoCorBonDataset(data.Dataset):
 
         # Convert all data to tensor
         x = torch.FloatTensor(img.transpose([2, 0, 1]).copy())
+        original_x = torch.FloatTensor(original_img.transpose([2, 0, 1]).copy())
         bon = torch.FloatTensor(bon.copy())
         y_cor = torch.FloatTensor(y_cor.copy())
 
         # Check whether additional output are requested
         out_lst = [x, bon, y_cor]
+        if self.teach:
+            out_lst.append(original_x)
         if self.return_cor:
             out_lst.append(cor)
         if self.return_path:
@@ -161,6 +178,7 @@ class ZillowIndoorDataset(data.Dataset):
         self.label_fnames = []
         for scene_id in scene_ids:
             scene_dir = os.path.join(root_dir, scene_id)
+            # self.label_fnames += sorted(glob.glob(os.path.join(scene_dir, 'label_cor_noocc', '*.txt')))
             self.label_fnames += glob.glob(os.path.join(scene_dir, 'label_cor_noocc', '*.txt'))
         
         self.flip = flip
@@ -312,7 +330,7 @@ class ZillowIndoorDoorDataset(data.Dataset):
         self.label_fnames = []
         for scene_id in scene_ids:
             scene_dir = os.path.join(root_dir, scene_id)
-            self.label_fnames += glob.glob(os.path.join(scene_dir, 'label_cor_noocc', '*.json'))
+            self.label_fnames += sorted(glob.glob(os.path.join(scene_dir, 'label_cor_noocc', '*.json')))
         
         self.flip = flip
         self.rotate = rotate
@@ -384,6 +402,8 @@ class ZillowIndoorDoorDataset(data.Dataset):
                     door_bar[start:end] = 1.
 
         out_lst = [x, door_bar]
+        if self.return_path:
+            out_lst.append(img_path)
 
         return out_lst
 
@@ -578,6 +598,12 @@ def cor_2_1d(cor, H, W):
     bon = ((bon + 0.5) / H - 0.5) * 2
     return bon
 
+
+def infinite_data_generator(data_loader):
+    while True:
+        for data in data_loader:
+            yield data
+            
 
 def sort_xy_filter_unique(xs, ys, y_small_first=True):
     xs, ys = np.array(xs), np.array(ys)

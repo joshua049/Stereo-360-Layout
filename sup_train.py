@@ -42,15 +42,18 @@ def feed_forward(net, x, y_bon, y_cor):
     y_cor = y_cor.to(device)
     losses = {}
 
-    y_bon_, y_cor_ = net(x)
-    # y_bon_= net(x)
+    # y_bon_, y_cor_ = net(x)
+    y_bon_= net(x)
     losses['bon'] = F.l1_loss(y_bon_, y_bon)
-    losses['cor'] = F.binary_cross_entropy_with_logits(y_cor_, y_cor)    
-    losses['total'] = losses['bon'] + losses['cor']
-    # losses['total'] = losses['bon']
+    # losses['cor'] = F.binary_cross_entropy_with_logits(y_cor_, y_cor)    
+    # losses['total'] = losses['bon'] + losses['cor']
+    losses['total'] = losses['bon']
 
     return losses
 
+def generate_n_corners_meters():
+    meters = {n_corner: AverageMeter() for n_corner in ['4', '6', '8', '10+', 'odd', 'overall']}
+    return meters
 
 if __name__ == '__main__':
 
@@ -64,6 +67,10 @@ if __name__ == '__main__':
     parser.add_argument('--pth', default=None,
                         help='path to load saved checkpoint.'
                              '(finetuning)')
+    parser.add_argument('--no_train', action='store_true',
+                        help='evaluation only')
+    parser.add_argument('--door_recover', action='store_true',
+                        help='evaluation with door recovery')
     # Model related
     parser.add_argument('--backbone', default='resnet50',
                         choices=ENCODER_RESNET + ENCODER_DENSENET,
@@ -87,6 +94,11 @@ if __name__ == '__main__':
                         help='disable pano stretch')
     parser.add_argument('--num_workers', default=6, type=int,
                         help='numbers of workers for dataloaders')
+    parser.add_argument('--sup_ratio', default=0, type=float,
+                        help='ratio of supervised data')
+    parser.add_argument('--num_mp3d', default=1650, type=int,
+                        help='number of mp3d_layout data')
+
     # optimization related arguments
     parser.add_argument('--freeze_earlier_blocks', default=-1, type=int)
     parser.add_argument('--batch_size_train', default=4, type=int,
@@ -125,28 +137,49 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     os.makedirs(os.path.join(args.ckpt, args.id), exist_ok=True)
 
-    # doornet = DoorNet()
-    # doornet.load_state_dict(torch.load('./ckpt/door_sub/best.pth')['state_dict'])
-    doornet = None
+    if args.door_recover:
+        doornet = DoorNet()
+        doornet.load_state_dict(torch.load('./ckpt/door_sub/best.pth')['state_dict'])
+        doornet.eval()
+    else:
+        doornet = None
 
     # Create dataloader
-    # dataset_train = PanoCorBonDataset(
-    dataset_train = ZillowIndoorDataset(
-        root_dir=args.train_root_dir,
-        subject='train',
-        flip=not args.no_flip, rotate=not args.no_rotate, gamma=not args.no_gamma,
-        stretch=not args.no_pano_stretch)
-    loader_train = DataLoader(dataset_train, args.batch_size_train,
-                              shuffle=True, drop_last=True,
-                              num_workers=args.num_workers,
-                              pin_memory=not args.no_cuda,
-                              worker_init_fn=lambda x: np.random.seed())
+    loader_train = []
+
+    if not args.no_train:
+        if args.sup_ratio > 0:
+            with open(os.path.join(args.train_root_dir, 'zind_partition.json')) as f: split_data = json.load(f)
+            num_train_scenes = len(split_data['train'])
+            split_index = int(num_train_scenes * args.sup_ratio) 
+                
+            dataset_train = ZillowIndoorDataset(
+                root_dir=args.train_root_dir,
+                subject='train',
+                flip=not args.no_flip, rotate=not args.no_rotate, gamma=not args.no_gamma,
+                stretch=not args.no_pano_stretch,
+                start=None, end=split_index)
+        else:
+            dataset_train = PanoCorBonDataset(
+                root_dir=args.train_root_dir,
+                subject='train',
+                flip=not args.no_flip, rotate=not args.no_rotate, gamma=not args.no_gamma,
+                stretch=not args.no_pano_stretch, end=args.num_mp3d)
+
+        loader_train = DataLoader(dataset_train, args.batch_size_train,
+                                shuffle=True, drop_last=True,
+                                num_workers=args.num_workers,
+                                pin_memory=not args.no_cuda,
+                                worker_init_fn=lambda x: np.random.seed())
     if args.valid_root_dir:
-        # dataset_valid = PanoCorBonDataset(
-        dataset_valid = ZillowIndoorDataset(
+        dataset_valid = PanoCorBonDataset(
+        # dataset_valid = ZillowIndoorDataset(
             root_dir=args.valid_root_dir, subject='val', return_cor=True,
             flip=False, rotate=False, gamma=False,
             stretch=False)
+
+    # print('Sup:', len(dataset_train))
+    # assert False
 
     # Create model
     if args.pth is not None:
@@ -210,43 +243,47 @@ if __name__ == '__main__':
     for ith_epoch in trange(1, args.epochs + 1, desc='Epoch', unit='ep'):
 
         # Train phase
-        net.train()
-        if args.freeze_earlier_blocks != -1:
-            b0, b1, b2, b3, b4 = net.feature_extractor.list_blocks()
-            blocks = [b0, b1, b2, b3, b4]
-            for i in range(args.freeze_earlier_blocks + 1):
-                for m in blocks[i]:
-                    m.eval()
-        iterator_train = iter(loader_train)
-        for _ in trange(len(loader_train),
-                        desc='Train ep%s' % ith_epoch, position=1):
-            # Set learning rate
-            adjust_learning_rate(optimizer, args)
+        if not args.no_train:
+            net.train()
+            if args.freeze_earlier_blocks != -1:
+                b0, b1, b2, b3, b4 = net.feature_extractor.list_blocks()
+                blocks = [b0, b1, b2, b3, b4]
+                for i in range(args.freeze_earlier_blocks + 1):
+                    for m in blocks[i]:
+                        m.eval()
+            iterator_train = iter(loader_train)
+            for _ in trange(len(loader_train),
+                            desc='Train ep%s' % ith_epoch, position=1):
+                # Set learning rate
+                # break
+                adjust_learning_rate(optimizer, args)
 
-            args.cur_iter += 1
-            # print('*'*30, args.cur_iter, '*'*30)
-            x, y_bon, y_cor = next(iterator_train)
+                args.cur_iter += 1
+                # print('*'*30, args.cur_iter, '*'*30)
+                x, y_bon, y_cor = next(iterator_train)
 
-            losses = feed_forward(net, x, y_bon, y_cor)
-            for k, v in losses.items():
-                k = 'train/%s' % k
-                tb_writer.add_scalar(k, v.item(), args.cur_iter)
-            tb_writer.add_scalar('train/lr', args.running_lr, args.cur_iter)
-            loss = losses['total']
+                losses = feed_forward(net, x, y_bon, y_cor)
+                for k, v in losses.items():
+                    k = 'train/%s' % k
+                    tb_writer.add_scalar(k, v.item(), args.cur_iter)
+                tb_writer.add_scalar('train/lr', args.running_lr, args.cur_iter)
+                loss = losses['total']
 
-            # backprop
-            optimizer.zero_grad()
-            loss.backward()
-            nn.utils.clip_grad_norm_(net.parameters(), 3.0, norm_type='inf')
-            optimizer.step()
+                # backprop
+                optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(net.parameters(), 3.0, norm_type='inf')
+                optimizer.step()
 
-            # break
+                # break
 
         # Valid phase
         net.eval()
         if args.valid_root_dir:
             valid_loss = {}
-            meters = {n_corner: AverageMeter() for n_corner in ['4', '6', '8', '10+', 'odd']}
+            # meters = {n_corner: AverageMeter() for n_corner in ['4', '6', '8', '10+', 'odd']}
+            # meters = {metric: AverageMeter() for metric in ['2DIoU', '3DIoU', 'rmse', 'delta_1']}
+            meters = {metric: generate_n_corners_meters() for metric in ['2DIoU', '3DIoU', 'rmse', 'delta_1']}
             excepts = 0
             for jth in trange(len(dataset_valid),
                             desc='Valid ep%d' % ith_epoch, position=2):
@@ -266,7 +303,7 @@ if __name__ == '__main__':
                     # dt_cor_id[:, 0] *= 1024
                     # dt_cor_id[:, 1] *= 512
                     try:
-                        dt_cor_id = inference(net, doornet, x, device, force_cuboid=False)[0]
+                        dt_cor_id = inference(net, doornet, x, device, force_cuboid=False, force_raw=True)[0]
                         dt_cor_id[:, 0] *= 1024
                         dt_cor_id[:, 1] *= 512
                     except Exception as e:
@@ -284,17 +321,28 @@ if __name__ == '__main__':
 
                     # print(losses['3DIoU'])                   
 
-                for n_corner in ['4', '6', '8', '10+', 'odd']:
-                    meters[n_corner].update(sum(true_eval[n_corner]['3DIoU']), len(true_eval[n_corner]['3DIoU']))
+                # for n_corner in ['4', '6', '8', '10+', 'odd']:
+                #     meters[n_corner].update(sum(true_eval[n_corner]['3DIoU']), len(true_eval[n_corner]['3DIoU']))
+                # for metric in ['2DIoU', '3DIoU', 'rmse', 'delta_1']:                    
+                #     meters[metric].update(sum(true_eval['overall'][metric]), len(true_eval['overall'][metric]))
 
+                for metric in ['2DIoU', '3DIoU', 'rmse', 'delta_1']:     
+                    for n_corner in ['4', '6', '8', '10+', 'odd', 'overall']:               
+                        meters[metric][n_corner].update(sum(true_eval[n_corner][metric]), len(true_eval[n_corner][metric]))
+                
                 for k, v in losses.items():
                     try:                        
                         valid_loss[k] = valid_loss.get(k, 0) + v.item() * x.size(0)
                     except ValueError:                        
                         valid_loss[k] = valid_loss.get(k, 0)
             print('Num of Exceptions:', excepts)
-            for n_corner in ['4', '6', '8', '10+', 'odd']:
-                print(f'{n_corner} Corners:', meters[n_corner].avg)
+            # for n_corner in ['4', '6', '8', '10+', 'odd']:
+            #     print(f'{n_corner} Corners:', meters[n_corner].avg)
+            for metric in ['2DIoU', '3DIoU', 'rmse', 'delta_1']:
+                dashline = '-' * 25
+                print(f'{dashline}{metric}{dashline}')
+                for n_corner in ['4', '6', '8', '10+', 'odd', 'overall']:               
+                    print(f'{n_corner}:', meters[metric][n_corner].avg)
 
             for k, v in valid_loss.items():
                 k = 'valid/%s' % k
@@ -304,17 +352,19 @@ if __name__ == '__main__':
             with open('loss.json', 'w') as f: json.dump(valid_loss, f, indent=4)
             now_valid_score = valid_loss['3DIoU'] / len(dataset_valid)
             print('Ep%3d %.4f vs. Best %.4f' % (ith_epoch, now_valid_score, args.best_valid_score))
-            if now_valid_score >= args.best_valid_score:
-                args.best_valid_score = now_valid_score
-                
+
+            if not args.no_train:
+                if now_valid_score >= args.best_valid_score:
+                    args.best_valid_score = now_valid_score
+                    
+                    save_model(net,
+                            os.path.join(args.ckpt, args.id, f'best_valid.pth'),
+                            args)
                 save_model(net,
-                           os.path.join(args.ckpt, args.id, f'best_valid_{ith_epoch}.pth'),
-                           args)
-            save_model(net,
-                           os.path.join(args.ckpt, args.id, 'last.pth'),
-                           args)
+                            os.path.join(args.ckpt, args.id, 'last.pth'),
+                            args)
         # Periodically save model
-        if ith_epoch % args.save_every == 0:
-            save_model(net,
-                       os.path.join(args.ckpt, args.id, 'epoch_%d.pth' % ith_epoch),
-                       args)
+        # if ith_epoch % args.save_every == 0:
+        #     save_model(net,
+        #                os.path.join(args.ckpt, args.id, 'epoch_%d.pth' % ith_epoch),
+        #                args)

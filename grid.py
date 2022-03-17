@@ -111,8 +111,10 @@ def guess_ceiling(y_bon, H, W):
     ceil_dist = torch.norm(ceil_2d, dim=-1)
     floor_dist = torch.norm(floor_2d, dim=-1)
     
+    # scale = (floor_dist.sum(dim=-1) / ceil_dist.sum(dim=-1))
     scale = (floor_dist / ceil_dist)
     
+    # return scale
     return scale.mean(dim=-1) 
 
 def compute_local(src_bon, H, W, ceiling_z):

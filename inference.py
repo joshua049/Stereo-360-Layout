@@ -168,12 +168,12 @@ def inference(net, doornet, x, device, flip=False, rotate=[], visualize=False,
 
     # Network feedforward (with testing augmentation)
     # x, aug_type = augment(x, flip, rotate)
-    # y_bon_ = net(x.to(device)).detach().cpu()
-    # y_cor_ = torch.ones(1, 1, 1024)
+    y_bon_ = net(x.to(device)).detach().cpu()
+    y_cor_ = torch.ones(1, 1, 1024)
 
-    y_bon_, y_cor_ = net(x.to(device))
-    y_bon_ = y_bon_.detach().cpu()
-    y_cor_ = y_cor_[0, 0].detach().cpu()   
+    # y_bon_, y_cor_ = net(x.to(device))
+    # y_bon_ = y_bon_.detach().cpu()
+    # y_cor_ = y_cor_[0, 0].detach().cpu()   
     # print(y_cor_.shape)
 
 
@@ -195,13 +195,14 @@ def inference(net, doornet, x, device, flip=False, rotate=[], visualize=False,
     y_bon_ = (y_bon_[0] / 2 + 0.5) * H - 0.5
     y_bon_new = y_bon_.numpy().copy()
 
-    y_bon_ = y_bon_.numpy()
-    y_cor_ = y_cor_.numpy()
+    # y_bon_ = y_bon_.numpy()
+    # y_cor_ = y_cor_.numpy()
     # print(y_bon_.shape, y_cor_.shape)
 
-    door_recover = False
-    # door_recover = True
+    # door_recover = False
+    door_recover = True
     if door_recover and doornet is not None:
+        # print('door!')
         doorbar = torch.where(doornet(x)[0] > 0.3, 1., 0.)
 
         diffs = np.diff(doorbar)
@@ -353,9 +354,16 @@ if __name__ == '__main__':
         for i_path in tqdm(paths, desc='Inferencing'):
             # if idx > 2000:
             #     break
+
+            # zind
             k = os.path.split(i_path)[-1][:-4]
             scene_id = os.path.basename(os.path.abspath(os.path.join(i_path, '../../')))
             img_path = os.path.abspath(os.path.join(i_path, '../../panos', f'{k}.jpg'))
+
+            # mp3d
+            k = os.path.split(i_path)[-1][:-4]
+            img_path = os.path.abspath(os.path.join(i_path, '../img', f'{k}.png'))
+
 
             # Load image
             img_pil = Image.open(img_path)
