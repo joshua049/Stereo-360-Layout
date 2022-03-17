@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 import pdb
 import numpy as np
@@ -54,142 +55,31 @@ def nan_to_num(x):
 
 def clip_bon(bon, H):
     # bon.shape = (N, 2, 1024)
-    margin = 40
-    ceil = torch.clamp(bon[:, 0, :], 0.5, H/2 - margin)
-    floor = torch.clamp(bon[:, 1, :], H/2 + margin, H)
+    margin = 15
+    ceil = torch.clamp(bon[:, 0, :], 2, H/2 - margin)
+    floor = torch.clamp(bon[:, 1, :], H/2 + margin, H-2)
 
     return torch.stack((ceil, floor), dim=1)
 
 
-def feed_forward(net, criterion, params, single=False, epoch=0):
+def sup_feed_forward(net, x, y_bon, y_cor):
+    x = x.to(device)
+    y_bon = y_bon.to(device)
+    y_cor = y_cor.to(device)
+    losses = {}
 
-    src_img, src_rotation_matrix, src_scale, src_translation, target_img, target_rotation_matrix, target_scale, target_translation, stretched_src_img, stretched_target_img, stretch_k, ceiling_height = params
-    if single:
-        src_img = src_img[None]
-        src_rotation_matrix = src_rotation_matrix[None]
-        src_scale = src_scale[None]
-        src_translation = src_translation[None]
-        target_img = target_img[None]
-        target_rotation_matrix = target_rotation_matrix[None]
-        target_scale = target_scale[None]
-        target_translation = target_translation[None]
-        stretched_src_img = stretched_src_img[None]
-        stretched_target_img = stretched_target_img[None]
-        stretch_k = stretch_k[None]
-        ceiling_height = ceiling_height[None]
-    
-    src_img = src_img.to(device)
-    src_rotation_matrix = src_rotation_matrix.to(device)
-    src_scale = src_scale.to(device)
-    src_translation = src_translation.to(device)
-    target_img = target_img.to(device)
-    target_rotation_matrix = target_rotation_matrix.to(device)
-    target_scale = target_scale.to(device)
-    target_translation = target_translation.to(device)
-    # stretched_src_img = stretched_src_img.to(device)
-    stretched_target_img = stretched_target_img.to(device)
-    stretch_k = stretch_k.to(device)
-    ceiling_height = ceiling_height.to(device)
-
-    N, _, H, W = src_img.shape
-
-    # assert not torch.any(torch.isnan(src_img))
-    # assert not torch.any(torch.isnan(target_img))
-
-    # y_bon_ori = nan_to_num(net(target_img))
-    y_bon_ori = net(target_img)
-    assert not torch.all(torch.isnan(y_bon_ori))
-    # if torch.all(torch.isnan(y_bon_ori)):
-    #     pdb.set_trace()
-    y_bon_ori = nan_to_num(y_bon_ori)
-
-    # y_bon = (y_bon_ori / np.pi + 0.5) * H - 0.5
-    y_bon = (y_bon_ori / 2 + 0.5) * H - 0.5
-    # y_bon = y_bon_ori * H - 0.5
-    y_bon = clip_bon(y_bon, H)
-    # y_bon = nan_to_num(y_bon)
-
-    # y_bon_src = nan_to_num(net(src_img))
-    # y_bon_src = (y_bon_src / 2 + 0.5) * H - 0.5
-    # y_bon_src = clip_bon(y_bon_src, H)
-
-    # assert not torch.any(torch.isnan(y_bon))
-
-    losses = {} 
-
-    src_transformer = Transformation2D(rotation_matrix=src_rotation_matrix, scale=src_scale[:, :, None], translation=src_translation)
-    target_transformer = Transformation2D(rotation_matrix=target_rotation_matrix, scale=target_scale[:, :, None], translation=target_translation)
-    
-    ceiling_z = ceiling_height - 1.
-    # ceiling_z = guess_ceiling(y_bon.clone(), H, W).reshape(ceiling_height.shape).detach()
-
-    grid = warp_index(src_transformer, target_transformer, y_bon, H, W, ceiling_z) 
-    assert not torch.any(torch.isnan(grid))    
-
-    warp_img = F.grid_sample(src_img, grid)
-    losses['ph'] = criterion(warp_img, target_img)
-    assert not torch.any(torch.isnan(warp_img))
-
-
-    pseudo_y_bon_ori = nan_to_num(net(warp_img.detach()))
-    pseudo_y_bon = (pseudo_y_bon_ori / 2 + 0.5) * H - 0.5
-    pseudo_y_bon = clip_bon(pseudo_y_bon, H)
-
-
-    # assert not torch.any(torch.isnan(pseudo_y_bon))
-    # assert not torch.any(torch.isnan(pseudo_y_bon_ori))
-    # assert not torch.any(torch.isnan(y_bon_ori))
-    target_local_2d = compute_local(y_bon, H, W, ceiling_z)
-    target_global_2d = compute_global(y_bon, target_transformer, H, W, ceiling_z)   
-    # target_local_2d = target_transformer.apply_inverse(target_global_2d.clone()) 
-
-    target_local_stretch = target_local_2d * stretch_k[:, None, :]
-    # target_global_stretch = target_transformer.to_global(target_local_2d.clone() * stretch_k[:, None, :])
-    # target_local_stretch = target_transformer.apply_inverse(target_global_stretch) 
-    # z = torch.cat([ceiling_z[:, None, :].expand(N, W, 1), torch.zeros(N, W, 1).to(device) - 1.], dim=1)
-    # target_local_3d = torch.cat([target_local_stretch, z], dim=-1)
-    # stretched_y_bon = TransformationSpherical.cartesian_to_pixel(target_local_3d.reshape(-1, 3), 1024).reshape(-1, 2, 1024, 2)[:, :, :, 1]
-    # stretched_y_bon = clip_bon(stretched_y_bon, H)
-    
-    stretched_y_bon_ = net(stretched_target_img)
-    stretched_y_bon_ = (stretched_y_bon_ / 2 + 0.5) * H - 0.5  
-    stretched_y_bon_ = clip_bon(stretched_y_bon_, H)
-    target_local_stretch_ = compute_local(stretched_y_bon_, H, W, ceiling_z)
-
-    target_global_2d -= target_translation
-
-    ceil = target_global_2d[:, :1024, :]
-    floor = target_global_2d[:, 1024:, :]
-    losses['ceil_floor'] = criterion(ceil, floor)
-
-    
-    kernel_size = 15
-    unfold = nn.Unfold(kernel_size=(1, kernel_size))
-    windows = unfold(target_global_2d.reshape(N, 2, W, 2).permute(0, 1, 3, 2)).reshape(N, 2, 2, -1, kernel_size) #(N, C, XY, L, K)
-    windows_mean = windows.median(dim=-1, keepdim=True).values
-    windows_slope = windows / windows.norm(dim=2, keepdim=True)
-    
-    
-    losses['bon'] = criterion(pseudo_y_bon_ori, y_bon_ori.detach())
-    # losses['stretch'] = criterion(stretched_y_bon, stretched_y_bon_)
-    losses['stretch'] = chamfer_distance(target_local_stretch.detach(), target_local_stretch_)[0]
-
-    # losses['ud_con'] = chamfer_distance(target_global_2d[:, :1024, :], target_global_2d[:, 1024:, :])[0]
-    losses['parallel'] = torch.abs((windows - windows_mean) * torch.flip(windows_slope, [2])).mean(dim=4).min(dim=2).values.mean()
-    # losses['parallel'] = windows.var(dim=4).min(dim=2).values.mean()
-    # losses['chamfer'] = compute_chamfer(chamfer_distance, y_bon_src,    src_transformer,    y_bon,          target_transformer, H, W)
-    # losses['chamfer'] = compute_chamfer(chamfer_distance, pseudo_y_bon, target_transformer, y_bon,          target_transformer, H, W) + \
-    #                     compute_chamfer(chamfer_distance, y_bon_src,    src_transformer,    y_bon,          target_transformer, H, W) + \
-    #                     compute_chamfer(chamfer_distance, y_bon_src,    src_transformer,    pseudo_y_bon,   target_transformer, H, W)
-    # losses['total'] = losses['ph']
-    losses['total'] = losses['ph'] + losses['bon'] * 0.1 + losses['parallel'] * 0.1 + losses['ceil_floor'] * 0.15 + losses['stretch'] * 0.1
-    # losses['standard'] = losses['ph'] + losses['parallel'] * 0.1 + losses['ceil_floor'] * 0.15 
-    # losses['consistency'] = losses['bon'] * 0.1 + losses['stretch'] * 0.1
-    # losses['total'] = losses['standard'] + losses['consistency']
+    # y_bon_, y_cor_ = net(x)
+    y_bon_= net(x)
+    losses['bon'] = F.l1_loss(y_bon_, y_bon)
+    # losses['cor'] = F.binary_cross_entropy_with_logits(y_cor_, y_cor)    
+    # losses['total'] = losses['bon'] + losses['cor']
+    losses['total'] = losses['bon']
 
     return losses
 
-def feed_forward_new(net, criterion, params, single=False, epoch=0, optimizer=None):
+def unsup_feed_forward(net, criterion, params, single=False, epoch=0):
+    # global _
+    # assert _ < 2500
 
     src_img, src_rotation_matrix, src_scale, src_translation, target_img, target_rotation_matrix, target_scale, target_translation, stretched_src_img, stretched_target_img, stretch_k, ceiling_height = params
     if single:
@@ -218,7 +108,8 @@ def feed_forward_new(net, criterion, params, single=False, epoch=0, optimizer=No
     stretch_k = stretch_k.to(device)
     ceiling_height = ceiling_height.to(device)
 
-    N, _, H, W = src_img.shape
+    N, C, H, W = src_img.shape
+
     y_bon_ori = net(target_img)
     assert not torch.all(torch.isnan(y_bon_ori))
     y_bon_ori = nan_to_num(y_bon_ori)
@@ -234,58 +125,82 @@ def feed_forward_new(net, criterion, params, single=False, epoch=0, optimizer=No
     ceiling_z = ceiling_height - 1.
     # ceiling_z = guess_ceiling(y_bon.clone(), H, W).reshape(ceiling_height.shape).detach()
 
-    grid = warp_index(src_transformer, target_transformer, y_bon, H, W, ceiling_z) 
-    assert not torch.any(torch.isnan(grid))    
+    have_photometric = True
+    if have_photometric:
+        grid = warp_index(src_transformer, target_transformer, y_bon, H, W, ceiling_z) 
+        assert not torch.any(torch.isnan(grid))    
 
-    warp_img = F.grid_sample(src_img, grid)
-    losses['ph'] = criterion(warp_img, target_img)
-    assert not torch.any(torch.isnan(warp_img))
+        warp_img = F.grid_sample(src_img, grid)
+
+        margin = 45
+        src_valid_map = torch.cat([torch.ones(N, C, H - margin, W), torch.zeros(N, C, margin, W)], axis=2).to(device)
+        target_valid_map = F.grid_sample(src_valid_map, grid)
+        # valid_map = torch.clip(src_valid_map * target_valid_map, min=0., max=1.).detach()
+        valid_map = target_valid_map.detach()
+
+        losses['ph'] = (criterion(warp_img, target_img) * valid_map).mean()
+        assert not torch.any(torch.isnan(warp_img))
+
+
+        pseudo_y_bon_ori = nan_to_num(net(warp_img.detach()))
+        pseudo_y_bon = (pseudo_y_bon_ori / 2 + 0.5) * H - 0.5
+        pseudo_y_bon = clip_bon(pseudo_y_bon, H)    
+
+        losses['bon'] = criterion(pseudo_y_bon_ori, y_bon_ori.detach()).mean()
+
+
+    # target_local_2d = compute_local(y_bon, H, W, ceiling_z)
     
 
-    target_local_2d = compute_local(y_bon, H, W, ceiling_z)
-    target_local_stretch = target_local_2d * stretch_k[:, None, :] 
+    compute_src = True
+    if compute_src:
+        y_bon_src = nan_to_num(net(src_img))
+        y_bon_src = (y_bon_src / 2 + 0.5) * H - 0.5
+        y_bon_src = clip_bon(y_bon_src, H)
 
-    target_global_2d = compute_global(y_bon, target_transformer, H, W, ceiling_z)   
-    target_global_2d -= target_translation
+        target_global_2d_for_src = compute_global(y_bon, target_transformer, H, W, ceiling_z)   
+        src_global_2d = compute_global(y_bon_src, src_transformer, H, W, ceiling_z)   
+        losses['src_tgt'] = chamfer_distance(src_global_2d, target_global_2d_for_src)[0]
 
-    ceil = target_global_2d[:, :1024, :]
-    floor = target_global_2d[:, 1024:, :]
-    losses['ceil_floor'] = criterion(ceil, floor)
     
-    kernel_size = 15
-    unfold = nn.Unfold(kernel_size=(1, kernel_size))
-    windows = unfold(target_global_2d.reshape(N, 2, W, 2).permute(0, 1, 3, 2)).reshape(N, 2, 2, -1, kernel_size) #(N, C, XY, L, K)
-    windows_mean = windows.median(dim=-1, keepdim=True).values
-    windows_slope = windows / windows.norm(dim=2, keepdim=True)
-    losses['parallel'] = torch.abs((windows - windows_mean) * torch.flip(windows_slope, [2])).mean(dim=4).min(dim=2).values.mean()
-    losses['standard'] = losses['ph'] + losses['parallel'] * 0.1 + losses['ceil_floor'] * 0.15 
-
-    if optimizer is not None:
-        optimizer.zero_grad()
-        losses['standard'].backward(retain_graph=True)
-        optimizer.step()
-
-    pseudo_y_bon_ori = nan_to_num(net(warp_img))
-    pseudo_y_bon = (pseudo_y_bon_ori / 2 + 0.5) * H - 0.5
-    pseudo_y_bon = clip_bon(pseudo_y_bon, H)
-
-    stretched_y_bon_ = net(stretched_target_img)
-    stretched_y_bon_ = (stretched_y_bon_ / 2 + 0.5) * H - 0.5  
-    stretched_y_bon_ = clip_bon(stretched_y_bon_, H)
-    target_local_stretch_ = compute_local(stretched_y_bon_, H, W, ceiling_z)   
     
-    losses['bon'] = criterion(y_bon_ori.detach(), pseudo_y_bon_ori)
-    losses['stretch'] = chamfer_distance(target_local_stretch.detach(), target_local_stretch_)[0]
-    losses['consistency'] = losses['bon'] * 0.1 + losses['stretch'] * 0.1
-
-    if optimizer is not None:
-        optimizer.zero_grad()
-        losses['consistency'].backward()
-        optimizer.step()  
+    # target_local_stretch = target_local_2d * stretch_k[:, None, :]
     
-    losses['total'] = losses['standard'] + losses['consistency']
+    # stretched_y_bon_ = net(stretched_target_img)
+    # stretched_y_bon_ = (stretched_y_bon_ / 2 + 0.5) * H - 0.5  
+    # stretched_y_bon_ = clip_bon(stretched_y_bon_, H)
+    # target_local_stretch_ = compute_local(stretched_y_bon_, H, W, ceiling_z)
+
+    # target_global_2d = target_global_2d_for_src - target_translation
+
+    # ceil = target_global_2d[:, :1024, :]
+    # floor = target_global_2d[:, 1024:, :]
+    # losses['ceil_floor'] = criterion(ceil, floor).mean()
+
+    
+    # kernel_size = 15
+    # unfold = nn.Unfold(kernel_size=(1, kernel_size))
+    # windows = unfold(target_global_2d.reshape(N, 2, W, 2).permute(0, 1, 3, 2)).reshape(N, 2, 2, -1, kernel_size) #(N, C, XY, L, K)
+    # windows_mean = windows.median(dim=-1, keepdim=True).values
+    # windows_slope = windows / windows.norm(dim=2, keepdim=True)   
+    # losses['parallel'] = torch.abs((windows - windows_mean) * torch.flip(windows_slope, [2])).mean(dim=4).min(dim=2).values.mean()
+    
+    
+    # losses['stretch'] = chamfer_distance(target_local_stretch.detach(), target_local_stretch_)[0]
+    # losses['parallel'] = torch.abs((windows - windows_mean) * torch.flip(windows_slope, [2])).mean(dim=4).min(dim=2).values.mean()
+    
+    if compute_src:
+        if have_photometric:
+            # losses['total'] = losses['ph'] + losses['bon'] * 0.1 + losses['parallel'] * 0.1 + losses['ceil_floor'] * 0.15 + losses['stretch'] * 0.1 + losses['src_tgt'] * 0.1
+            losses['total'] = losses['ph'] + losses['bon'] * 0.1 + losses['src_tgt'] * 0.1
+        else:
+            losses['total'] = losses['parallel'] * 0.1 + losses['ceil_floor'] * 0.15 + losses['stretch'] * 0.1 + losses['src_tgt'] * 0.1
+    else:
+        losses['total'] = losses['ph'] + losses['bon'] * 0.1 + losses['parallel'] * 0.1 + losses['ceil_floor'] * 0.15 + losses['stretch'] * 0.1
 
     return losses
+
+
 
 if __name__ == '__main__':
 
@@ -299,6 +214,12 @@ if __name__ == '__main__':
     parser.add_argument('--pth', default=None,
                         help='path to load saved checkpoint.'
                              '(finetuning)')
+    parser.add_argument('--log_to_file', action='store_true',
+                        help='redirect stdout to logs/{id}.log')
+    parser.add_argument('--no_train', action='store_true',
+                        help='evaluation only')
+    parser.add_argument('--no_sup', action='store_true',
+                        help='self-supervised only')
     # Model related
     parser.add_argument('--backbone', default='resnet50',
                         choices=ENCODER_RESNET + ENCODER_DENSENET,
@@ -322,6 +243,10 @@ if __name__ == '__main__':
                         help='disable pano stretch')
     parser.add_argument('--num_workers', default=6, type=int,
                         help='numbers of workers for dataloaders')
+    parser.add_argument('--sup_ratio', default=0, type=float,
+                        help='ratio of supervised data')
+    parser.add_argument('--num_mp3d', default=1650, type=int,
+                        help='number of mp3d_layout data')
     # optimization related arguments
     parser.add_argument('--freeze_earlier_blocks', default=-1, type=int)
     parser.add_argument('--batch_size_train', default=4, type=int,
@@ -360,28 +285,70 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
     os.makedirs(os.path.join(args.ckpt, args.id), exist_ok=True)
 
+    print('Margin revised.')
+
     # torch.manual_seed(2021)
     # torch.autograd.set_detect_anomaly(True)
+
+    # if args.log_to_file:
+    #     sys.stdout = open(f'{args.logs}/{args.id}.log')
 
 
     # Create dataloader
     # dataset_train = PanoCorBonDataset(
-    dataset_train = ZillowIndoorPairDataset(
-        root_dir=args.train_root_dir,
-        subject='train',
-        flip=not args.no_flip, rotate=not args.no_rotate, gamma=not args.no_gamma,
-        stretch=not args.no_pano_stretch,
-        max_stretch=1.5)
-    loader_train = DataLoader(dataset_train, args.batch_size_train,
+    with open(os.path.join(args.train_root_dir, 'zind_partition.json')) as f: split_data = json.load(f)
+    num_train_scenes = len(split_data['train'])
+
+    if args.sup_ratio > 0:
+        split_index = int(num_train_scenes * args.sup_ratio)
+        
+
+        sup_dataset_train = ZillowIndoorDataset(
+            root_dir=args.train_root_dir,
+            subject='train',
+            flip=not args.no_flip, rotate=not args.no_rotate, gamma=not args.no_gamma,
+            stretch=not args.no_pano_stretch,
+            start=None, end=split_index)
+    else:
+        split_index = None
+        mp3d_root = '/mnt/home_6T/sunset/mp3d_layout/train_no_occ'
+        sup_dataset_train = PanoCorBonDataset(
+            root_dir=mp3d_root,
+            subject='train',
+            flip=not args.no_flip, rotate=not args.no_rotate, gamma=not args.no_gamma,
+            stretch=not args.no_pano_stretch,
+            start=None, end=args.num_mp3d)
+
+    sup_loader_train = DataLoader(sup_dataset_train, args.batch_size_train * 2,
                               shuffle=True, drop_last=True,
                               num_workers=args.num_workers,
                               pin_memory=not args.no_cuda,
                               worker_init_fn=lambda x: np.random.seed())
+
+    unsup_dataset_train = ZillowIndoorPairDataset(
+        root_dir=args.train_root_dir,
+        subject='train',
+        flip=False, rotate=False, gamma=False,
+        stretch=True,
+        max_stretch=1.5,
+        start=split_index)
+    unsup_loader_train = DataLoader(unsup_dataset_train, args.batch_size_train,
+                              shuffle=True, drop_last=True,
+                              num_workers=args.num_workers,
+                              pin_memory=not args.no_cuda,
+                              worker_init_fn=lambda x: np.random.seed())
+
+    print('Sup:', len(sup_dataset_train))
+    print('UnSup:', len(unsup_dataset_train))
+
+    # assert False
+
+
     if args.valid_root_dir:
         # dataset_valid = PanoCorBonDataset(
-        dataset_valid = ZillowIndoorPairDataset(
-            root_dir=args.valid_root_dir, subject='val', return_cor=True,
-            flip=False, rotate=False, gamma=False,
+        dataset_valid = ZillowIndoorDataset(
+            root_dir=args.valid_root_dir, subject='val', 
+            flip=False, rotate=False, gamma=False, return_cor=True,
             stretch=False)
 
     # Create model
@@ -392,7 +359,10 @@ if __name__ == '__main__':
     else:
         net = HorizonNet(args.backbone, not args.no_rnn).to(device)
 
-    criterion = torch.nn.MSELoss()
+    criterion = torch.nn.MSELoss(reduction='none')
+    # doornet = DoorNet()
+    # doornet.load_state_dict(torch.load('./ckpt/door_sub/best.pth')['state_dict'])
+    doornet = None
     
     
     assert -1 <= args.freeze_earlier_blocks and args.freeze_earlier_blocks <= 4
@@ -429,122 +399,183 @@ if __name__ == '__main__':
     tb_writer = SummaryWriter(log_dir=tb_path)
 
     # Init variable
-    args.warmup_iters = args.warmup_epochs * len(loader_train)
-    args.max_iters = args.epochs * len(loader_train)
+    args.warmup_iters = args.warmup_epochs * (len(sup_loader_train) + len(unsup_loader_train))
+    args.max_iters = args.epochs * (len(sup_loader_train) + len(unsup_loader_train))
     args.running_lr = args.warmup_lr if args.warmup_epochs > 0 else args.lr
     args.cur_iter = 0
-    args.best_valid_score = 10000
+    args.best_valid_score = -1
 
     # Start training
     for ith_epoch in trange(1, args.epochs + 1, desc='Epoch', unit='ep'):
 
         # Train phase
-        net.train()
-        if args.freeze_earlier_blocks != -1:
-            b0, b1, b2, b3, b4 = net.feature_extractor.list_blocks()
-            blocks = [b0, b1, b2, b3, b4]
-            for i in range(args.freeze_earlier_blocks + 1):
-                for m in blocks[i]:
-                    m.eval()
-        iterator_train = iter(loader_train)
-        for _ in trange(len(loader_train),
-                        desc='Train ep%s' % ith_epoch, position=1):
-            # Set learning ratetmux
-            adjust_learning_rate(optimizer, args)
+        if not args.no_train:
+            net.train()
+            if args.freeze_earlier_blocks != -1:
+                b0, b1, b2, b3, b4 = net.feature_extractor.list_blocks()
+                blocks = [b0, b1, b2, b3, b4]
+                for i in range(args.freeze_earlier_blocks + 1):
+                    for m in blocks[i]:
+                        m.eval()
+            
+            if not args.no_sup and ith_epoch > args.epochs // 2:
+                iterator_train = iter(sup_loader_train)
+                for _ in trange(len(sup_loader_train),
+                                desc='Sup Train ep%s' % ith_epoch, position=1):
+                    # Set learning rate
+                    adjust_learning_rate(optimizer, args)
 
-            args.cur_iter += 1
-            # print('*'*30, args.cur_iter, '*'*30)
-            params = next(iterator_train)
+                    args.cur_iter += 1
+                    # print('*'*30, args.cur_iter, '*'*30)
+                    x, y_bon, y_cor = next(iterator_train)
 
-            losses = feed_forward(net, criterion, params, epoch=ith_epoch)
-            for k, v in losses.items():
-                k = 'train/%s' % k
-                tb_writer.add_scalar(k, v.item(), args.cur_iter)
-            tb_writer.add_scalar('train/lr', args.running_lr, args.cur_iter)
+                    losses = sup_feed_forward(net, x, y_bon, y_cor)
+                    for k, v in losses.items():
+                        k = 'train/%s' % k
+                        tb_writer.add_scalar(k, v.item(), args.cur_iter)
+                    tb_writer.add_scalar('train/lr', args.running_lr, args.cur_iter)
+                    loss = losses['total']
 
-            for term in ['total']:
-                loss = losses[term]
+                    # backprop
+                    optimizer.zero_grad()
+                    loss.backward()
+                    nn.utils.clip_grad_norm_(net.parameters(), 3.0, norm_type='inf')
+                    optimizer.step()
 
-                # backprop
-                optimizer.zero_grad()
-                loss.backward()
+                    # break
+            else:
+                loss_history = [None] * 10
+                model_history = [None] * 10
+                iterator_train = iter(unsup_loader_train)
+                for _ in trange(len(unsup_loader_train),
+                                desc='Unsup Train ep%s' % ith_epoch, position=1):
+                    # Set learning ratetmux
+                    adjust_learning_rate(optimizer, args)
 
-                nn.utils.clip_grad_norm_(net.parameters(), 1.0, norm_type='inf')
-                optimizer.step()
+                    args.cur_iter += 1
+                    # print('*'*30, args.cur_iter, '*'*30)
+                    params = next(iterator_train)
 
+                    try:
+                        losses = unsup_feed_forward(net, criterion, params, epoch=ith_epoch)
+                        # assert _ < 10
+                    except AssertionError as e:
+                        for i, (loss_it, net_it) in enumerate(zip(loss_history, model_history)):
+                            print(f'Ep {i+1}:')
+                            print(loss_it)
+                            for p in net_it.parameters():
+                                if torch.all(torch.isnan(p)):                                
+                                    print('Parameters:', p) 
+                                    print('Gradients:', p.grad) 
+
+                        print('Last: ')
+                        for p in net.parameters():
+                            if torch.all(torch.isnan(p)):
+                                print('Parameters:', p) 
+                                print('Gradients:', p.grad) 
+
+                        assert False
+                        
+                    for k, v in losses.items():
+                        k = 'train/%s' % k
+                        tb_writer.add_scalar(k, v.item(), args.cur_iter)
+                    tb_writer.add_scalar('train/lr', args.running_lr, args.cur_iter)
+
+                    loss_history.pop(0)
+                    loss_history.append(losses)
+
+                    model_history.pop(0)
+                    model_history.append(deepcopy(net).to('cpu'))
+
+                    for term in ['total']:
+                        loss = losses[term]
+
+                        # backprop
+                        optimizer.zero_grad()
+                        loss.backward()
+
+                        nn.utils.clip_grad_norm_(net.parameters(), 1.0, norm_type='inf')
+                        optimizer.step()
+        
         # Valid phase
         net.eval()
         if args.valid_root_dir:
             valid_loss = {}
-            meters = {n_corner: AverageMeter() for n_corner in ['4', '6', '8', '10+', 'odd']}
+            # meters = {n_corner: AverageMeter() for n_corner in ['4', '6', '8', '10+', 'odd']}
+            meters = {metric: AverageMeter() for metric in ['2DIoU', '3DIoU', 'rmse', 'delta_1']} 
             excepts = 0
-            loss_meter = AverageMeter()
             for jth in trange(len(dataset_valid),
                             desc='Valid ep%d' % ith_epoch, position=2):
-                if jth > 1000:
-                    break
-                # x, y_bon, y_cor, gt_cor_id = dataset_valid[jth]
-                # x, y_bon, y_cor = x[None], y_bon[None], y_cor[None]
-                params = dataset_valid[jth]
+                x, y_bon, y_cor, gt_cor_id = dataset_valid[jth]
+                x, y_bon, y_cor = x[None], y_bon[None], y_cor[None]
                 with torch.no_grad():
-                    losses = feed_forward(net, criterion, params, single=True)
-                    loss_meter.update(losses['total'].item(), 1)
+                    losses = sup_feed_forward(net, x, y_bon, y_cor)
+
                     # True eval result instead of training objective
-                    # true_eval = dict([
-                    #     (n_corner, {'2DIoU': [], '3DIoU': [], 'rmse': [], 'delta_1': []})
-                    #     for n_corner in ['4', '6', '8', '10+', 'odd', 'overall']
-                    # ])
+                    true_eval = dict([
+                        (n_corner, {'2DIoU': [], '3DIoU': [], 'rmse': [], 'delta_1': []})
+                        for n_corner in ['4', '6', '8', '10+', 'odd', 'overall']
+                    ])
 
-                    # try:
-                    #     dt_cor_id = inference(net, x, device, force_cuboid=False, force_raw=True)[0]
-                    #     dt_cor_id[:, 0] *= 1024
-                    #     dt_cor_id[:, 1] *= 512
-                    # except:
-                    #     excepts += 1
-                    #     dt_cor_id = np.array([
-                    #         [k//2 * 1024, 256 - ((k%2)*2 - 1) * 120]
-                    #         for k in range(8)
-                    #     ])
-                    # # dt_cor_id = inference(net, x, device, force_cuboid=False, force_raw=True)[0]
-                    # # dt_cor_id[:, 0] *= 1024
-                    # # dt_cor_id[:, 1] *= 512
+                    
+                    # dt_cor_id = inference(net, doornet, x, device, force_cuboid=False)[0]
+                    # dt_cor_id[:, 0] *= 1024
+                    # dt_cor_id[:, 1] *= 512
+                    try:
+                        dt_cor_id = inference(net, doornet, x, device, force_cuboid=False, force_raw=True)[0]
+                        dt_cor_id[:, 0] *= 1024
+                        dt_cor_id[:, 1] *= 512
+                    except Exception as e:
+                        print(e)
+                        excepts += 1
+                        dt_cor_id = np.array([
+                            [k//2 * 1024, 256 - ((k%2)*2 - 1) * 120]
+                            for k in range(8)
+                        ])
+                    test_general(dt_cor_id, gt_cor_id, 1024, 512, true_eval)
+                    losses['2DIoU'] = torch.FloatTensor([true_eval['overall']['2DIoU']])
+                    losses['3DIoU'] = torch.FloatTensor([true_eval['overall']['3DIoU']])
+                    losses['rmse'] = torch.FloatTensor([true_eval['overall']['rmse']])
+                    losses['delta_1'] = torch.FloatTensor([true_eval['overall']['delta_1']]) 
 
-                    # test_general(dt_cor_id, gt_cor_id, 1024, 512, true_eval)
-                    # losses = {}
-                    # losses['2DIoU'] = torch.FloatTensor([true_eval['overall']['2DIoU']])
-                    # losses['3DIoU'] = torch.FloatTensor([true_eval['overall']['3DIoU']])
-                    # losses['rmse'] = torch.FloatTensor([true_eval['overall']['rmse']])
-                    # losses['delta_1'] = torch.FloatTensor([true_eval['overall']['delta_1']])       
-
-                    # loss_meter.update(losses['3DIoU'].mean().item(), 1)             
-                    # print(losses['3DIoU'].mean().item())
+                    # print(losses['3DIoU'])                   
 
                 # for n_corner in ['4', '6', '8', '10+', 'odd']:
                 #     meters[n_corner].update(sum(true_eval[n_corner]['3DIoU']), len(true_eval[n_corner]['3DIoU']))
 
-                # for k, v in losses.items():
-                #     try:                        
-                #         valid_loss[k] = valid_loss.get(k, 0) + v.item() * x.size(0)
-                #     except ValueError:                        
-                #         valid_loss[k] = valid_loss.get(k, 0)
+                for metric in ['2DIoU', '3DIoU', 'rmse', 'delta_1']:
+                    meters[metric].update(sum(true_eval['overall'][metric]), len(true_eval['overall'][metric]))
+                
+                for k, v in losses.items():
+                    try:                        
+                        valid_loss[k] = valid_loss.get(k, 0) + v.item() * x.size(0)
+                    except ValueError:                        
+                        valid_loss[k] = valid_loss.get(k, 0)
+            print('Num of Exceptions:', excepts)
             # for n_corner in ['4', '6', '8', '10+', 'odd']:
             #     print(f'{n_corner} Corners:', meters[n_corner].avg)
 
-            # for k, v in valid_loss.items():
-            #     k = 'valid/%s' % k
-            #     tb_writer.add_scalar(k, v / len(dataset_valid), ith_epoch)
+            for metric in ['2DIoU', '3DIoU', 'rmse', 'delta_1']:
+                print(f'{metric}:', meters[metric].avg)
+            
+            for k, v in valid_loss.items():
+                k = 'valid/%s' % k
+                tb_writer.add_scalar(k, v / len(dataset_valid), ith_epoch)
 
             # Save best validation loss model
-            # now_valid_score = valid_loss['3DIoU'] / len(dataset_valid)
-            now_valid_score = loss_meter.avg
+            now_valid_score = valid_loss['3DIoU'] / len(dataset_valid)
+            # now_valid_score = loss_meter.avg
             # scheduler.step(now_valid_score)
             print('Ep%3d %.4f vs. Best %.4f' % (ith_epoch, now_valid_score, args.best_valid_score))
-            if now_valid_score <= args.best_valid_score:
+            if now_valid_score >= args.best_valid_score:
                 args.best_valid_score = now_valid_score
                 
                 save_model(net,
-                           os.path.join(args.ckpt, args.id, f'best_valid_{ith_epoch}.pth'),
+                           os.path.join(args.ckpt, args.id, f'best_valid.pth'),
                            args)
+                # save_model(net,
+                #            os.path.join(args.ckpt, args.id, f'best_valid_{ith_epoch}.pth'),
+                #            args)
             save_model(net,
                        os.path.join(args.ckpt, args.id, 'last.pth'),
                        args)

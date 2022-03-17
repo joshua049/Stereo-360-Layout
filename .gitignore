@@ -8,5 +8,7 @@ pics
 *.log
 *.csv
 *.json
+*.txt
 .ipynb_checkpoints/
 backup
+remove
