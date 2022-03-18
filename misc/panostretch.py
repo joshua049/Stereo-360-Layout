@@ -102,13 +102,15 @@ def pano_stretch(img, corners, kx, ky, order=1):
     ], axis=-1)
 
     # Process corners
-    corners_u0 = coorx2u(corners[:, 0], img.shape[1])
-    corners_v0 = coory2v(corners[:, 1], img.shape[0])
-    corners_u = np.arctan2(np.sin(corners_u0) * ky / kx, np.cos(corners_u0))
-    corners_v = np.arctan(np.tan(corners_v0) * np.sin(corners_u) / np.sin(corners_u0) / ky)
-    cornersX = u2coorx(corners_u, img.shape[1])
-    cornersY = v2coory(corners_v, img.shape[0])
-    stretched_corners = np.stack([cornersX, cornersY], axis=-1)
+    stretched_corners = corners
+    if corners is not None:
+        corners_u0 = coorx2u(corners[:, 0], img.shape[1])
+        corners_v0 = coory2v(corners[:, 1], img.shape[0])
+        corners_u = np.arctan2(np.sin(corners_u0) * ky / kx, np.cos(corners_u0))
+        corners_v = np.arctan(np.tan(corners_v0) * np.sin(corners_u) / np.sin(corners_u0) / ky)
+        cornersX = u2coorx(corners_u, img.shape[1])
+        cornersY = v2coory(corners_v, img.shape[0])
+        stretched_corners = np.stack([cornersX, cornersY], axis=-1)
 
     return stretched_img, stretched_corners
 

@@ -341,7 +341,7 @@ if __name__ == '__main__':
     print('Sup:', len(sup_dataset_train))
     print('UnSup:', len(unsup_dataset_train))
 
-    # assert False
+    assert False
 
 
     if args.valid_root_dir:
