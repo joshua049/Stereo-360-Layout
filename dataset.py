@@ -157,29 +157,19 @@ class PanoCorBonDataset(data.Dataset):
 
         return out_lst
 
-class ZillowIndoorDataset(data.Dataset):
+class ZInD_SupSet(data.Dataset):
 
     def __init__(self, root_dir, subject,
                  flip=False, rotate=False, gamma=False, stretch=False,
                  p_base=0.96, max_stretch=2.0,
                  normcor=False, return_cor=False, return_path=False, start=None, end=None):
-        # self.img_dirs = [sub_dir for sub_dir in glob.glob(os.path.join(root_dir, '*')) if os.isdir(sub_dir)]
-        # self.cor_dir = os.path.join(root_dir, 'label_cor')
-        # self.img_fnames = sorted([
-        #     fname for fname in os.listdir(self.img_dir)
-        #     if fname.endswith('.jpg') or fname.endswith('.png')
-        # ])
-        # self.txt_fnames = ['%s.txt' % fname[:-4] for fname in self.img_fnames]        
-        # self.img_fnames = sorted(glob.glob(os.path.join(root_dir, '*', 'panos', '*.jpg')))
         assert subject in ['train', 'val', 'test'], root_dir
         with open(os.path.join(root_dir, 'zind_partition.json')) as f: split_data = json.load(f)
         scene_ids = split_data[subject][start:end]
-        # self.img_fnames = []
         self.label_fnames = []
         for scene_id in scene_ids:
             scene_dir = os.path.join(root_dir, scene_id)
-            # self.label_fnames += sorted(glob.glob(os.path.join(scene_dir, 'label_cor_noocc', '*.txt')))
-            self.label_fnames += glob.glob(os.path.join(scene_dir, 'label_cor_noocc', '*.txt'))
+            self.label_fnames += glob.glob(os.path.join(scene_dir, 'label', '*.txt'))
         
         self.flip = flip
         self.rotate = rotate
@@ -191,20 +181,17 @@ class ZillowIndoorDataset(data.Dataset):
         self.return_cor = return_cor
         self.return_path = return_path
 
-        # self._check_dataset()
+        self._check_dataset()
 
     def _check_dataset(self):
-        for fname in self.txt_fnames:
-            assert os.path.isfile(os.path.join(self.cor_dir, fname)),\
-                '%s not found' % os.path.join(self.cor_dir, fname)
+        for fname in self.label_fnames:
+            assert os.path.isfile(fname),\
+                '%s not found' % fname
 
     def __len__(self):
         return len(self.label_fnames)
 
     def __getitem__(self, idx):
-        # Read image
-        # img_path = os.path.join(self.img_dir,
-        #                         self.img_fnames[idx])
         label_path = self.label_fnames[idx]
         dirname, basename = os.path.split(label_path)
         basename = basename.split('.')[0]
@@ -213,15 +200,10 @@ class ZillowIndoorDataset(data.Dataset):
         img = np.array(Image.open(img_path).resize((1024, 512)), np.float32)[..., :3] / 255.
         H, W = img.shape[:2]
 
-        # Read ground truth corners
-        # with open(label_path, 'r') as f:
-        #     cor = np.array([line.strip().split() for line in f if line.strip()], np.float32)
-
         cor = np.loadtxt(label_path, delimiter=' ', dtype=int)
 
         # Corner with minimum x should at the beginning
         cor = np.roll(cor[:, :2], -2 * np.argmin(cor[::2, 0]), 0)
-
 
         # Detect occlusion
         occlusion = find_occlusion(cor[::2].copy()).repeat(2)
@@ -244,7 +226,6 @@ class ZillowIndoorDataset(data.Dataset):
             img, cor = panostretch.pano_stretch(img, cor, kx, ky)
 
         # Prepare 1d ceiling-wall/floor-wall boundary
-        # print(cor.shape)
         bon = cor_2_1d(cor, H, W)
 
         # Random flip
@@ -268,14 +249,7 @@ class ZillowIndoorDataset(data.Dataset):
             img = img ** p
 
         # Prepare 1d wall-wall probability
-        # print(type(occlusion), occlusion.shape, occlusion.dtype)
-        corx = cor[~occlusion, 0]
-        # print(corx.reshape(-1, 1))
-        # print(corx, np.arange(img.shape[1]))
-        # if not isinstance(corx, np.ndarray):
-        #     print('*'*30, type(corx), '*'*30)
-        
-
+        corx = cor[~occlusion, 0]      
         dist_o = cdist(corx.reshape(-1, 1),
                        np.arange(img.shape[1]).reshape(-1, 1))
                     #    p=1)
@@ -286,12 +260,7 @@ class ZillowIndoorDataset(data.Dataset):
                        np.arange(img.shape[1]).reshape(-1, 1) - img.shape[1])
                     #    p=1)
         dist = np.min([dist_o, dist_r, dist_l], 0)
-        # print(dist.shape)
         nearest_dist = dist.min(0)
-        # try: 
-        #     nearest_dist = dist.min(0)
-        # except ValueError:
-        #     nearest_dist = np.zeros((1, dist.shape[1]), dtype=np.float32) + 100000.
         y_cor = (self.p_base ** nearest_dist).reshape(1, -1)
 
         # Convert all data to tensor
@@ -309,105 +278,7 @@ class ZillowIndoorDataset(data.Dataset):
 
         return out_lst
 
-class ZillowIndoorDoorDataset(data.Dataset):
-
-    def __init__(self, root_dir, subject,
-                 flip=False, rotate=False, gamma=False, stretch=False,
-                 p_base=0.96, max_stretch=2.0,
-                 normcor=False, return_cor=False, return_path=False):
-        # self.img_dirs = [sub_dir for sub_dir in glob.glob(os.path.join(root_dir, '*')) if os.isdir(sub_dir)]
-        # self.cor_dir = os.path.join(root_dir, 'label_cor')
-        # self.img_fnames = sorted([
-        #     fname for fname in os.listdir(self.img_dir)
-        #     if fname.endswith('.jpg') or fname.endswith('.png')
-        # ])
-        # self.txt_fnames = ['%s.txt' % fname[:-4] for fname in self.img_fnames]        
-        # self.img_fnames = sorted(glob.glob(os.path.join(root_dir, '*', 'panos', '*.jpg')))
-        assert subject in ['train', 'val', 'test'], root_dir
-        with open(os.path.join(root_dir, 'zind_partition.json')) as f: split_data = json.load(f)
-        scene_ids = split_data[subject]
-        # self.img_fnames = []
-        self.label_fnames = []
-        for scene_id in scene_ids:
-            scene_dir = os.path.join(root_dir, scene_id)
-            self.label_fnames += sorted(glob.glob(os.path.join(scene_dir, 'label_cor_noocc', '*.json')))
-        
-        self.flip = flip
-        self.rotate = rotate
-        self.gamma = gamma
-        self.stretch = stretch
-        self.p_base = p_base
-        self.max_stretch = max_stretch
-        self.normcor = normcor
-        self.return_cor = return_cor
-        self.return_path = return_path
-
-        # self._check_dataset()
-
-    def _check_dataset(self):
-        for fname in self.txt_fnames:
-            assert os.path.isfile(os.path.join(self.cor_dir, fname)),\
-                '%s not found' % os.path.join(self.cor_dir, fname)
-
-    def __len__(self):
-        return len(self.label_fnames)
-
-    def __getitem__(self, idx):
-        # Read image
-        # img_path = os.path.join(self.img_dir,
-        #                         self.img_fnames[idx])
-        label_path = self.label_fnames[idx]        
-        dirname, basename = os.path.split(label_path)
-        basename = basename.split('.')[0]
-        scene_dir = os.path.dirname(dirname)
-        img_path = os.path.join(scene_dir, 'panos', f'{basename}.jpg')
-        img = np.array(Image.open(img_path).resize((1024, 512)), np.float32)[..., :3] / 255.
-        H, W = img.shape[:2]
-
-        x = torch.FloatTensor(img.transpose([2, 0, 1]).copy())
-
-        with open(label_path) as f: pano_data = json.load(f)
-        # Corner with minimum x should at the beginning
-        vertices = torch.Tensor(pano_data['layout_visible']['doors'])
-        # print(vertices)
-
-        # assert len(vertices.shape) == 2, vertices.shape
-        door_bar = torch.zeros(1024)
-        if len(vertices.shape) == 2:
-            left = vertices[::3] # (N, 2)
-            right = vertices[1::3] # (N, 2)
-            top_z = vertices[2::3][:, 1] # (N, )
-
-            N, _ = left.shape
-        
-            # print(left, top_z[None])
-            left_vertices = torch.cat([left, top_z[:, None]], dim=-1)
-            right_vertices = torch.cat([right, top_z[:, None]], dim=-1)
-            # print(left_vertices)
-            door_vertices = torch.empty((N*2, 3))
-            door_vertices[::2] = left_vertices
-            door_vertices[1::2] = right_vertices
-
-            cor = TransformationSpherical.cartesian_to_pixel(door_vertices, 1024).long()
-            # print(cor)
-            
-            
-            for i in range(N):
-                start = min(cor[i*2, 0], cor[i*2+1, 0])
-                end = max(cor[i*2, 0], cor[i*2+1, 0])
-                if end - start > 512:
-                    door_bar[end:] = 1.
-                    door_bar[:start] = 1.
-                else:
-                    door_bar[start:end] = 1.
-
-        out_lst = [x, door_bar]
-        if self.return_path:
-            out_lst.append(img_path)
-
-        return out_lst
-
-class ZillowIndoorPairDataset(data.Dataset):
+class ZInD_UnSupSet(data.Dataset):
     def __init__(self, root_dir, subject,
                  flip=False, rotate=False, gamma=False, stretch=False,
                  p_base=0.96, max_stretch=2.0,
@@ -416,16 +287,19 @@ class ZillowIndoorPairDataset(data.Dataset):
         assert subject in ['train', 'val', 'test'], root_dir
         with open(os.path.join(root_dir, 'zind_partition.json')) as f: split_data = json.load(f)
         scene_ids = split_data[subject][start:end]
-        all_txts = []
+        all_jsons = []
         for scene_id in scene_ids:
             scene_dir = os.path.join(root_dir, scene_id)
-            all_txts += glob.glob(os.path.join(scene_dir, 'label_cor_noocc', '*.json'))
+            all_jsons += glob.glob(os.path.join(scene_dir, 'label', '*.json'))
             
         all_scenes = {}
-        for filename in all_txts:
+        for filename in all_jsons:
             partial_room_id, pano_id = filename.split('_pano_')
             if partial_room_id in all_scenes:
-                all_scenes[partial_room_id].append(pano_id)
+                if pano_id.endswith('_primary'):
+                    all_scenes[partial_room_id].insert(0, pano_id)
+                else:
+                    all_scenes[partial_room_id].append(pano_id)
             else:
                 all_scenes[partial_room_id] = [pano_id]
         
@@ -433,16 +307,7 @@ class ZillowIndoorPairDataset(data.Dataset):
         for k, v in all_scenes.items():
             if len(v) >= 2:
                 file_pair = (f'{k}_pano_{v[0]}', f'{k}_pano_{v[1]}')
-                self.scenes.append(file_pair)
-
-                # file_pair = (f'{k}_pano_{v[1]}', f'{k}_pano_{v[0]}')
-                # self.scenes.append(file_pair)
-
-                # v_pairs = itertools.permutations(v, 2)
-                # for v0, v1 in v_pairs:
-                #     file_pair = (f'{k}_pano_{v0}', f'{k}_pano_{v1}')
-                #     self.scenes.append(file_pair)
-                
+                self.scenes.append(file_pair)                
                 
         self.flip = flip
         self.rotate = rotate
@@ -454,10 +319,10 @@ class ZillowIndoorPairDataset(data.Dataset):
         self.return_cor = return_cor
         self.return_path = return_path       
         
-            
+        # self._check_dataset() 
 
     def _check_dataset(self):
-        for fname in self.txt_fnames:
+        for src_path, target_path in self.scenes:
             assert os.path.isfile(os.path.join(self.cor_dir, fname)),\
                 '%s not found' % os.path.join(self.cor_dir, fname)
 
@@ -468,30 +333,27 @@ class ZillowIndoorPairDataset(data.Dataset):
         src_path, target_path = self.scenes[idx]
         
         label_path = src_path
-        corner_path = label_path.replace('.json', '.txt')
         dirname, basename = os.path.split(label_path)
         basename = basename.split('.')[0]
+        if basename.endswith('_primary'):
+            basename = basename.split('_primary')[0]
         scene_dir = os.path.dirname(dirname)
         img_path = os.path.join(scene_dir, 'panos', f'{basename}.jpg')
         with open(label_path) as f: src_ann = json.load(f)
         src_img = np.array(Image.open(img_path).resize((1024, 512)), np.float32)[..., :3] / 255.
         H, W = src_img.shape[:2]
-        
-        src_cor = np.loadtxt(corner_path, delimiter=' ', dtype=int)
-        src_cor = np.roll(src_cor[:, :2], -2 * np.argmin(src_cor[::2, 0]), 0)
-        # src_bon = cor_2_1d(cor, H, W)
+
         
         label_path = target_path
-        corner_path = label_path.replace('.json', '.txt')
         dirname, basename = os.path.split(label_path)
         basename = basename.split('.')[0]
+        if basename.endswith('_primary'):
+            basename = basename.split('_primary')[0]
         scene_dir = os.path.dirname(dirname)
         img_path = os.path.join(scene_dir, 'panos', f'{basename}.jpg')
         with open(label_path) as f: target_ann = json.load(f)
         target_img = np.array(Image.open(img_path).resize((1024, 512)), np.float32)[..., :3] / 255.
-        target_cor = np.loadtxt(corner_path, delimiter=' ', dtype=int)
-        target_cor = np.roll(target_cor[:, :2], -2 * np.argmin(target_cor[::2, 0]), 0)
-        # target_bon = cor_2_1d(cor, H, W)
+        
 
         src_transformer = Transformation2D.from_zind_data(src_ann['floor_plan_transformation'])
         target_transformer = Transformation2D.from_zind_data(target_ann['floor_plan_transformation'])
@@ -506,31 +368,14 @@ class ZillowIndoorPairDataset(data.Dataset):
             ky = np.random.uniform(1.0, self.max_stretch)
             kx = max(1 / kx, min(0.5 / xmin, 1.0))
             ky = max(1 / ky, min(0.5 / ymin, 1.0))
-            # if np.random.randint(2) == 0:
-            #     kx = max(1 / kx, min(0.5 / xmin, 1.0))
-            # else:
-            #     kx = min(kx, max(10.0 / xmax, 1.0))
-            # if np.random.randint(2) == 0:
-            #     ky = max(1 / ky, min(0.5 / ymin, 1.0))
-            # else:
-            #     ky = min(ky, max(10.0 / ymax, 1.0))
-            # img, cor = panostretch.pano_stretch(img, cor, kx, ky)
-
-        # Prepare 1d ceiling-wall/floor-wall boundary
-        # bon = cor_2_1d(cor, H, W)
-
-        # Random flip
-        if self.flip and np.random.randint(2) == 0:
-            img = np.flip(img, axis=1)
-            bon = np.flip(bon, axis=1)
-            cor[:, 0] = img.shape[1] - 1 - cor[:, 0]
-
-        # Random horizontal rotate
-        if self.rotate:
-            dx = np.random.randint(img.shape[1])
-            img = np.roll(img, dx, axis=1)
-            bon = np.roll(bon, dx, axis=1)
-            cor[:, 0] = (cor[:, 0] + dx) % img.shape[1]
+            if np.random.randint(2) == 0:
+                kx = max(1 / kx, min(0.5 / xmin, 1.0))
+            else:
+                kx = min(kx, max(10.0 / xmax, 1.0))
+            if np.random.randint(2) == 0:
+                ky = max(1 / ky, min(0.5 / ymin, 1.0))
+            else:
+                ky = min(ky, max(10.0 / ymax, 1.0))           
 
         # Random gamma augmentation
         if self.gamma:
@@ -539,8 +384,8 @@ class ZillowIndoorPairDataset(data.Dataset):
                 p = 1 / p
             img = img ** p
 
-        stretched_src_img, _ = panostretch.pano_stretch(src_img, src_cor, kx, ky)
-        stretched_target_img, _ = panostretch.pano_stretch(target_img, target_cor, kx, ky)
+        stretched_src_img, _ = panostretch.pano_stretch(src_img, None, kx, ky)
+        stretched_target_img, _ = panostretch.pano_stretch(target_img, None, kx, ky)
 
         # Convert all data to tensor
         src_img = torch.FloatTensor(src_img.transpose([2, 0, 1]).copy())
@@ -549,22 +394,11 @@ class ZillowIndoorPairDataset(data.Dataset):
         stretched_target_img = torch.FloatTensor(stretched_target_img.transpose([2, 0, 1]).copy())
         ceiling_height = torch.FloatTensor([src_ann['ceiling_height']])
         stretch_k = torch.FloatTensor([ky, kx])
-        # kx = torch.FloatTensor([kx])
-        # ky = torch.FloatTensor([ky])
 
-        # src_params = [src_img, src_cor, src_transformer.rotation_matrix, src_transformer.scale, src_transformer.translation]
-        # target_params = [target_img, target_cor, target_transformer.rotation_matrix, target_transformer.scale, target_transformer.translation]
-        # stretched_params = [stretched_src_img, stretched_target_img, kx, ky, ceiling_height]
-
-        # Check whether additional output are requested
         out_lst = [ src_img, src_transformer.rotation_matrix, src_transformer.scale, src_transformer.translation, 
                     target_img, target_transformer.rotation_matrix, target_transformer.scale, target_transformer.translation, 
                     stretched_src_img, stretched_target_img, stretch_k, ceiling_height
                 ]
-        # if self.return_cor:
-        #     out_lst.append(cor)
-        # if self.return_path:
-        #     out_lst.append(img_path)
 
         return out_lst    
 
