@@ -52,76 +52,6 @@ def layout_2_depth(cor_id, h, w, return_mask=False):
         return depth, floor_mask, ceil_mask, wall_mask
     return depth
 
-
-# def test_general(dt_cor_id, gt_cor_id, w, h, losses):
-#     dt_floor_coor = dt_cor_id[1::2]
-#     dt_ceil_coor = dt_cor_id[0::2]
-#     gt_floor_coor = gt_cor_id[1::2]
-#     gt_ceil_coor = gt_cor_id[0::2]
-#     assert (dt_floor_coor[:, 0] != dt_ceil_coor[:, 0]).sum() == 0
-#     assert (gt_floor_coor[:, 0] != gt_ceil_coor[:, 0]).sum() == 0
-
-#     # Eval 3d IoU and height error(in meter)
-#     N = len(dt_floor_coor)
-#     ch = -1.6
-#     dt_floor_xy = post_proc.np_coor2xy(dt_floor_coor, ch, 1024, 512, floorW=1, floorH=1)
-#     gt_floor_xy = post_proc.np_coor2xy(gt_floor_coor, ch, 1024, 512, floorW=1, floorH=1)
-#     dt_poly = Polygon(dt_floor_xy)
-#     gt_poly = Polygon(gt_floor_xy)
-#     if not gt_poly.is_valid:
-#         if 'gt_path' in locals():
-#             print('Skip ground truth invalid (%s)' % gt_path)
-#         return
-
-#     # 2D IoU
-#     try:
-#         area_dt = dt_poly.area
-#         area_gt = gt_poly.area
-#         area_inter = dt_poly.intersection(gt_poly).area
-#         iou2d = area_inter / (area_gt + area_dt - area_inter)
-#     except:
-#         iou2d = 0
-
-#     # 3D IoU
-#     try:
-#         cch_dt = post_proc.get_z1(dt_floor_coor[:, 1], dt_ceil_coor[:, 1], ch, 512)
-#         cch_gt = post_proc.get_z1(gt_floor_coor[:, 1], gt_ceil_coor[:, 1], ch, 512)
-#         h_dt = abs(cch_dt.mean() - ch)
-#         h_gt = abs(cch_gt.mean() - ch)
-#         area3d_inter = area_inter * min(h_dt, h_gt)
-#         area3d_pred = area_dt * h_dt
-#         area3d_gt = area_gt * h_gt
-#         iou3d = area3d_inter / (area3d_pred + area3d_gt - area3d_inter)
-#     except:
-#         iou3d = 0
-
-#     # rmse & delta_1
-#     gt_layout_depth = layout_2_depth(gt_cor_id, h, w)
-#     try:
-#         dt_layout_depth = layout_2_depth(dt_cor_id, h, w)
-#     except:
-#         dt_layout_depth = np.zeros_like(gt_layout_depth)
-#     rmse = ((gt_layout_depth - dt_layout_depth)**2).mean() ** 0.5
-#     thres = np.maximum(gt_layout_depth/dt_layout_depth, dt_layout_depth/gt_layout_depth)
-#     delta_1 = (thres < 1.25).mean()
-
-#     # Add a result
-#     n_corners = len(gt_floor_coor)
-#     if n_corners % 2 == 1:
-#         n_corners = 'odd'
-#     elif n_corners < 10:
-#         n_corners = str(n_corners)
-#     else:
-#         n_corners = '10+'
-#     losses[n_corners]['2DIoU'].append(iou2d)
-#     losses[n_corners]['3DIoU'].append(iou3d)
-#     losses[n_corners]['rmse'].append(rmse)
-#     losses[n_corners]['delta_1'].append(delta_1)
-#     losses['overall']['2DIoU'].append(iou2d)
-#     losses['overall']['3DIoU'].append(iou3d)
-#     losses['overall']['rmse'].append(rmse)
-#     losses['overall']['delta_1'].append(delta_1)
-
 def test_general(dt_cor_id, gt_cor_id, w, h, losses):
     dt_floor_coor = dt_cor_id[1::2]
     dt_ceil_coor = dt_cor_id[0::2]
@@ -129,9 +59,6 @@ def test_general(dt_cor_id, gt_cor_id, w, h, losses):
     gt_ceil_coor = gt_cor_id[0::2]
     assert (dt_floor_coor[:, 0] != dt_ceil_coor[:, 0]).sum() == 0
     assert (gt_floor_coor[:, 0] != gt_ceil_coor[:, 0]).sum() == 0
-
-    # dt_floor_coor = dt_cor_id
-    # gt_floor_coor = gt_cor_id
 
     # Eval 3d IoU and height error(in meter)
     N = len(dt_floor_coor)
