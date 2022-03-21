@@ -54,7 +54,6 @@ def nan_to_num(x):
     return x + res    
 
 def clip_bon(bon, H):
-    # bon.shape = (N, 2, 1024)
     topbot_margin = 2
     mid_margin = 15
     ceil = torch.clamp(bon[:, 0, :], topbot_margin, H/2 - mid_margin)
@@ -158,8 +157,7 @@ def unsup_feed_forward(args, net, params, single=False, epoch=0):
     losses['total'] = losses['main'] + 0.1 * sum(losses['aux'].values())
 
     return losses
-
-
+    
 
 if __name__ == '__main__':
 
@@ -325,9 +323,6 @@ if __name__ == '__main__':
 
     print('Valid:', len(dataset_valid))
 
-    # assert False
-
-
     # Create model
     if args.pth is not None:
         print('Finetune model is given.')
@@ -410,8 +405,8 @@ if __name__ == '__main__':
                             k = 'train/%s' % k
                             tb_writer.add_scalar(k, v.item(), args.cur_iter)
                     tb_writer.add_scalar('train/lr', args.running_lr, args.cur_iter)
-
                     loss = losses['total']
+
                     # backprop
                     optimizer.zero_grad()
                     loss.backward()
@@ -442,8 +437,7 @@ if __name__ == '__main__':
                     nn.utils.clip_grad_norm_(net.parameters(), 3.0, norm_type='inf')
                     optimizer.step()
 
-                    # break
-            
+
         
         # Valid phase
         net.eval()

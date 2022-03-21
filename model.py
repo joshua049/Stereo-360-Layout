@@ -183,8 +183,8 @@ class HorizonNet(nn.Module):
         self.step_cols = 4
         self.rnn_hidden_size = 512
 
-        from_official = False
-        if from_official:
+        from_original_arch = False
+        if from_original_arch:
             self.out_channel = 3
             self.has_sigmoid = False
             self.scale = 2 / np.pi
@@ -192,7 +192,6 @@ class HorizonNet(nn.Module):
             self.out_channel = 2
             self.has_sigmoid = True
             self.scale = 1.
-            # self.scale = np.pi / 2.
 
         # Encoder
         if backbone.startswith('res'):
@@ -223,11 +222,6 @@ class HorizonNet(nn.Module):
             self.drop_out = nn.Dropout(0.5)
             self.linear = nn.Linear(in_features=2 * self.rnn_hidden_size,
                                     out_features=self.out_channel * self.step_cols)
-            # self.linear.bias.data[0*self.step_cols:1*self.step_cols].fill_(-1)
-            # self.linear.bias.data[1*self.step_cols:2*self.step_cols].fill_(-0.478)
-            # self.linear.bias.data[2*self.step_cols:3*self.step_cols].fill_(0.425)
-            # self.linear.bias.data[0*self.step_cols:1*self.step_cols].fill_(-0.478)
-            # self.linear.bias.data[1*self.step_cols:2*self.step_cols].fill_(0.425)
             if self.out_channel == 3:
                 self.linear.bias.data[0*self.step_cols:1*self.step_cols].fill_(-1)
                 self.linear.bias.data[1*self.step_cols:2*self.step_cols].fill_(-0.305)
@@ -244,10 +238,8 @@ class HorizonNet(nn.Module):
                 nn.Linear(self.rnn_hidden_size, 3 * self.step_cols),
             )
             self.linear[-1].bias.data[0*self.step_cols:1*self.step_cols].fill_(-1)
-            self.linear[-1].bias.data[1*self.step_cols:2*self.step_cols].fill_(-0.478)
-            self.linear[-1].bias.data[2*self.step_cols:3*self.step_cols].fill_(0.425)
-            # self.linear.bias.data[0*self.step_cols:1*self.step_cols].fill_(-0.088)
-            # self.linear.bias.data[1*self.step_cols:2*self.step_cols].fill_(-0.302)
+            self.linear[-1].bias.data[1*self.step_cols:2*self.step_cols].fill_(-0.305)
+            self.linear[-1].bias.data[2*self.step_cols:3*self.step_cols].fill_(0.27)
         self.x_mean.requires_grad = False
         self.x_std.requires_grad = False
         wrap_lr_pad(self)
@@ -276,8 +268,7 @@ class HorizonNet(nn.Module):
                 output = self.sigmoid(output)
             output = output.view(output.shape[0], output.shape[1], self.out_channel, self.step_cols)  # [seq_len, b, 3, step_cols]
             output = output.permute(1, 2, 0, 3)  # [b, 3, seq_len, step_cols]
-            output = output.contiguous().view(output.shape[0], self.out_channel, -1)  # [b, 3, seq_len*step_cols]            
-            # output[:, 0, :] *= -1
+            output = output.contiguous().view(output.shape[0], self.out_channel, -1)  # [b, 3, seq_len*step_cols]    
             if self.has_sigmoid:
                 if self.out_channel == 3:
                     output[:, 1, :] *= -1
@@ -291,29 +282,7 @@ class HorizonNet(nn.Module):
             output = output.contiguous().view(output.shape[0], 3, -1)  # [b, 3, w*step_cols]
 
         output = output * self.scale
-        if self.out_channel == 3:
-        
-            # output.shape => B x 3 x W
-            cor = output[:, :1]  # B x 1 x W
-            bon = output[:, 1:]  # B x 2 x W
+        if self.out_channel == 3:        
+            output = output[:, 1:]  # B x 2 x W
 
-            return bon
-            # return bon, cor
-        else:        
-            return output
-        
-
-class DoorNet(nn.Module):
-    backbone = 'resnet18'
-    use_rnn = False
-    def __init__(self):
-        super(DoorNet, self).__init__()
-        self.feature_extractor = models.resnet18(pretrained=True)
-        self.fc = nn.Linear(1000, 1024)
-        self.sigmoid = nn.Sigmoid()        
-    
-    def forward(self, x):
-        x = self.feature_extractor(x)
-        x = self.fc(x)
-        x = self.sigmoid(x)
-        return x
+        return output
