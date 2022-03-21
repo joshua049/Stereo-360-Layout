@@ -12,3 +12,4 @@ pics
 .ipynb_checkpoints/
 backup
 remove
+scripts*

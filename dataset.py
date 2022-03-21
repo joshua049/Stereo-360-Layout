@@ -26,22 +26,21 @@ class PanoCorBonDataset(data.Dataset):
                  flip=False, rotate=False, gamma=False, stretch=False,
                  p_base=0.96, max_stretch=2.0,
                  normcor=False, return_cor=False, return_path=False, 
-                 start=None, end=None, labeled=True, teach=False):
+                 sample_num=None, labeled=True, teach=False):
         self.img_dir = os.path.join(root_dir, 'img')
         self.cor_dir = os.path.join(root_dir, 'label_cor')
         
-        if end in [50, 100, 200, 400]:
-            # split_data = pd.read_csv('matterport_train_splits.csv')
-            split_data = pd.read_csv('active_select_splits.csv')            
+        if sample_num is not None:
+            assert sample_num in [50, 100, 200, 400]
+            split_data = pd.read_csv('matterport_train_splits.csv')         
             self.img_fnames = sorted([
-                f'{fname}.png' for fname in split_data['fileid'][split_data[str(end)]==int(labeled)]
+                f'{fname}.png' for fname in split_data['fileid'][split_data[str(sample_num)]==int(labeled)]
             ])
         else:
-            all_img_fnames = sorted([
+            self.img_fnames = sorted([
                 fname for fname in os.listdir(self.img_dir)
                 if fname.endswith('.jpg') or fname.endswith('.png')
             ])
-            self.img_fnames = all_img_fnames[start:end]
 
         self.txt_fnames = ['%s.txt' % fname[:-4] for fname in self.img_fnames]
         self.flip = flip
@@ -162,10 +161,10 @@ class ZInD_SupSet(data.Dataset):
     def __init__(self, root_dir, subject,
                  flip=False, rotate=False, gamma=False, stretch=False,
                  p_base=0.96, max_stretch=2.0,
-                 normcor=False, return_cor=False, return_path=False, start=None, end=None):
+                 normcor=False, return_cor=False, return_path=False):
         assert subject in ['train', 'val', 'test'], root_dir
         with open(os.path.join(root_dir, 'zind_partition.json')) as f: split_data = json.load(f)
-        scene_ids = split_data[subject][start:end]
+        scene_ids = split_data[subject]
         self.label_fnames = []
         for scene_id in scene_ids:
             scene_dir = os.path.join(root_dir, scene_id)
@@ -282,11 +281,11 @@ class ZInD_UnSupSet(data.Dataset):
     def __init__(self, root_dir, subject,
                  flip=False, rotate=False, gamma=False, stretch=False,
                  p_base=0.96, max_stretch=2.0,
-                 normcor=False, return_cor=False, return_path=False, start=None, end=None):
+                 normcor=False, return_cor=False, return_path=False):
 
         assert subject in ['train', 'val', 'test'], root_dir
         with open(os.path.join(root_dir, 'zind_partition.json')) as f: split_data = json.load(f)
-        scene_ids = split_data[subject][start:end]
+        scene_ids = split_data[subject]
         all_jsons = []
         for scene_id in scene_ids:
             scene_dir = os.path.join(root_dir, scene_id)
@@ -363,11 +362,12 @@ class ZInD_UnSupSet(data.Dataset):
         kx, ky = 1, 1
         # Stretch augmentation
         if self.stretch:
-            xmin, ymin, xmax, ymax = cor2xybound(target_cor)
+            # xmin, ymin, xmax, ymax = cor2xybound(target_cor)
+            xmin, ymin, xmax, ymax = 0.8, 0.8, 8., 8.
             kx = np.random.uniform(1.0, self.max_stretch)
             ky = np.random.uniform(1.0, self.max_stretch)
-            kx = max(1 / kx, min(0.5 / xmin, 1.0))
-            ky = max(1 / ky, min(0.5 / ymin, 1.0))
+            # kx = max(1 / kx, min(0.5 / xmin, 1.0))
+            # ky = max(1 / ky, min(0.5 / ymin, 1.0))
             if np.random.randint(2) == 0:
                 kx = max(1 / kx, min(0.5 / xmin, 1.0))
             else:
