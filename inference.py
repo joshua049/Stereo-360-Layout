@@ -22,15 +22,6 @@ from misc import post_proc, panostretch, utils
 from eval_general import test_general
 
 
-def find_N_peaks(signal, r=29, min_v=0.05, N=None):
-    max_v = maximum_filter(signal, size=r, mode='wrap')
-    pk_loc = np.where(max_v == signal)[0]
-    pk_loc = pk_loc[signal[pk_loc] > min_v]
-    if N is not None:
-        order = np.argsort(-signal[pk_loc])
-        pk_loc = pk_loc[order[:N]]
-        pk_loc = pk_loc[np.argsort(pk_loc)]
-    return pk_loc, signal[pk_loc]
 
 
 def augment(x_img, flip, rotate):
@@ -66,123 +57,16 @@ def augment_undo(x_imgs_augmented, aug_type):
     return np.array(x_imgs)
 
 
-# def inference(net, x, device, flip=False, rotate=[], visualize=False,
-#               force_raw=True, force_cuboid=True, min_v=None, r=0.05):
-#     '''
-#     net   : the trained HorizonNet
-#     x     : tensor in shape [1, 3, 512, 1024]
-#     flip  : fliping testing augmentation
-#     rotate: horizontal rotation testing augmentation
-#     '''
-
-#     H, W = tuple(x.shape[2:])
-
-#     # Network feedforward (with testing augmentation)
-#     x, aug_type = augment(x, flip, rotate)
-#     # y_bon_, y_cor_ = net(x.to(device))
-#     y_bon_ = net(x.to(device))
-#     # y_bon_ = augment_undo(y_bon_.cpu(), aug_type).mean(0)
-#     # y_cor_ = augment_undo(torch.sigmoid(y_cor_).cpu(), aug_type).mean(0)
-
-#     # Visualize raw model output
-#     if visualize:
-#         vis_out = visualize_a_data(x[0],
-#                                    torch.FloatTensor(y_bon_[0]),
-#                                    torch.FloatTensor(y_cor_[0]))
-#     else:
-#         vis_out = None
-
-#     y_bon_ = (y_bon_[0] / np.pi + 0.5) * H - 0.5
-#     y_bon_ = y_bon_.cpu().detach().numpy()
-#     # y_cor_ = y_cor_[0, 0]
-
-#     # Init floor/ceil plane
-#     z0 = 50
-#     # _, z1 = post_proc.np_refine_by_fix_z(*y_bon_, z0)
-#     z1 = 0
-
-#     # Detech wall-wall peaks
-#     if min_v is None:
-#         min_v = 0 if force_cuboid else 0.05
-#     r = int(round(W * r / 2))
-#     N = 4 if force_cuboid else None
-#     # xs_ = find_N_peaks(y_cor_, r=r, min_v=min_v, N=N)[0]
-
-#     # Generate wall-walls
-#     if force_raw:
-        
-#         cor = np.stack([np.arange(1024), y_bon_], 1)
-
-#     else:
-#         cor, xy_cor = post_proc.gen_ww(xs_, y_bon_[0], z0, tol=abs(0.16 * z1 / 1.6), force_cuboid=force_cuboid)
-#         if not force_cuboid:
-#             # Check valid (for fear self-intersection)
-#             xy2d = np.zeros((len(xy_cor), 2), np.float32)
-#             for i in range(len(xy_cor)):
-#                 xy2d[i, xy_cor[i]['type']] = xy_cor[i]['val']
-#                 xy2d[i, xy_cor[i-1]['type']] = xy_cor[i-1]['val']
-#             if not Polygon(xy2d).is_valid:
-#                 print(
-#                     'Fail to generate valid general layout!! '
-#                     'Generate cuboid as fallback.',
-#                     file=sys.stderr)
-#                 xs_ = find_N_peaks(y_cor_, r=r, min_v=0, N=4)[0]
-#                 cor, xy_cor = post_proc.gen_ww(xs_, y_bon_[0], z0, tol=abs(0.16 * z1 / 1.6), force_cuboid=True)
-
-#     # Expand with btn coory
-#     # cor = np.hstack([cor, post_proc.infer_coory(cor[:, 1], z1 - z0, z0)[:, None]])
-
-#     # Collect corner position in equirectangular
-#     cor_id = np.zeros((len(cor), 2), np.float32)
-#     for j in range(len(cor)):
-#         # cor_id[j*2] = cor[j, 0], cor[j, 1]
-#         # cor_id[j*2 + 1] = cor[j, 0], cor[j, 2]
-#         cor_id[j] = cor[j, 0], cor[j, 1]
-
-#     # Normalized to [0, 1]
-#     cor_id[:, 0] /= W
-#     cor_id[:, 1] /= H
-
-#     return cor_id, z0, z1, vis_out
-
-def get_gaussian_kernel(kernel_size, sigma):
-    mean = (kernel_size - 1) / 2
-    variance = sigma ** 2.
-
-    x = torch.arange(kernel_size).float()
-    gaussian_kernel = torch.exp(- (x - mean) ** 2. / (2 * variance))
-    gaussian_kernel /= torch.sum(gaussian_kernel)
-
-    return gaussian_kernel
-
-def inference(net, doornet, x, device, flip=False, rotate=[], visualize=False,
-              force_raw=False, force_cuboid=True, min_v=None, r=0.05):
+def inference(net, x, device, visualize=False):
     '''
     net   : the trained HorizonNet
     x     : tensor in shape [1, 3, 512, 1024]
-    flip  : fliping testing augmentation
-    rotate: horizontal rotation testing augmentation
     '''
 
     H, W = tuple(x.shape[2:])
 
     # Network feedforward (with testing augmentation)
-    # x, aug_type = augment(x, flip, rotate)
     y_bon_ = net(x.to(device)).detach().cpu()
-    y_cor_ = torch.ones(1, 1, 1024)
-
-    # y_bon_, y_cor_ = net(x.to(device))
-    # y_bon_ = y_bon_.detach().cpu()
-    # y_cor_ = y_cor_[0, 0].detach().cpu()   
-    # print(y_cor_.shape)
-
-
-    # i = 0
-    # y_bon_[i, 0] = torch.Tensor(sg.convolve(y_bon_[i, 0].detach(), gaussian_kernel, mode='same'))
-    # y_bon_[i, 1] = torch.Tensor(sg.convolve(y_bon_[i, 1].detach(), gaussian_kernel, mode='same'))
-    # y_bon_ = augment_undo(y_bon_.cpu(), aug_type).mean(0)
-    # y_cor_ = augment_undo(torch.sigmoid(y_cor_).cpu(), aug_type).mean(0)
-    # print(y_bon_)
 
     # Visualize raw model output
     if visualize:
@@ -193,92 +77,8 @@ def inference(net, doornet, x, device, flip=False, rotate=[], visualize=False,
         vis_out = None
 
     y_bon_ = (y_bon_[0] / 2 + 0.5) * H - 0.5
-    y_bon_new = y_bon_.numpy().copy()
+    cor = np.vstack([np.arange(1024), y_bon_]).T
 
-    # y_bon_ = y_bon_.numpy()
-    # y_cor_ = y_cor_.numpy()
-    # print(y_bon_.shape, y_cor_.shape)
-
-    # door_recover = False
-    door_recover = True
-    if door_recover and doornet is not None:
-        # print('door!')
-        doorbar = torch.where(doornet(x)[0] > 0.3, 1., 0.)
-
-        diffs = np.diff(doorbar)
-        starts = np.argwhere(diffs == 1).reshape(-1)
-        stops = np.argwhere(diffs == -1).reshape(-1)
-        
-        if len(stops) > 0:
-            if len(starts) < len(stops):
-                starts = np.concatenate([starts, np.array([0])])
-                
-            if stops[0] < starts[0]:
-                stops = np.concatenate([stops[1:], stops[:1]])
-            
-
-
-            for start, stop in zip(starts, stops):
-                p1 = np.array([start, y_bon_new[0, start]])
-                p2 = np.array([stop, y_bon_new[0, stop]])
-                new_bon = panostretch.pano_connect_points(p1, p2, z=-50)[1:-1, 1]
-                if start > stop:
-                    y_bon_new[0, start+1:], y_bon_new[0, :stop] = np.split(new_bon, [1024-start-1,])
-
-                else:
-                    y_bon_new[0, start+1:stop] = new_bon
-
-                p1 = np.array([start, y_bon_new[1, start]])
-                p2 = np.array([stop, y_bon_new[1, stop]])
-                new_bon = panostretch.pano_connect_points(p1, p2, z=50)[1:-1, 1]
-                if start > stop:
-                    y_bon_new[1, start+1:], y_bon_new[1, :stop] = np.split(new_bon, [1024-start-1,])
-
-                else:
-                    y_bon_new[1, start+1:stop] = new_bon
-
-    # y_bon_ = y_bon_.detach().cpu()
-    # y_cor_ = y_cor_[0, 0]
-
-    # Init floor/ceil plane
-    z0 = 50
-    # _, z1 = post_proc.np_refine_by_fix_z(*y_bon_, z0)
-    z1 = 0
-    # Detech wall-wall peaks
-    if min_v is None:
-        min_v = 0 if force_cuboid else 0.05
-    r = int(round(W * r / 2))
-    N = 4 if force_cuboid else None
-    # xs_ = find_N_peaks(y_cor_, r=r, min_v=min_v, N=N)[0]
-
-    # Generate wall-walls
-    # force_raw = True
-
-    if force_raw:        
-        # cor = np.stack([np.arange(1024), y_bon_], 1)
-        cor = np.vstack([np.arange(1024), y_bon_new]).T
-    else:
-        _, z1 = post_proc.np_refine_by_fix_z(*y_bon_, z0)
-        xs_ = find_N_peaks(y_cor_, r=r, min_v=min_v, N=N)[0]
-        # print(xs_)
-        cor, xy_cor = post_proc.gen_ww(xs_, y_bon_[0], z0, tol=abs(0.16 * z1 / 1.6), force_cuboid=force_cuboid)
-        if not force_cuboid:
-            # Check valid (for fear self-intersection)
-            xy2d = np.zeros((len(xy_cor), 2), np.float32)
-            for i in range(len(xy_cor)):
-                xy2d[i, xy_cor[i]['type']] = xy_cor[i]['val']
-                xy2d[i, xy_cor[i-1]['type']] = xy_cor[i-1]['val']
-            if not Polygon(xy2d).is_valid:
-                print(
-                    'Fail to generate valid general layout!! '
-                    'Generate cuboid as fallback.',
-                    file=sys.stderr)
-                xs_ = find_N_peaks(y_cor_, r=r, min_v=0, N=4)[0]
-                cor, xy_cor = post_proc.gen_ww(xs_, y_bon_[0], z0, tol=abs(0.16 * z1 / 1.6), force_cuboid=True)
-
-        # Expand with btn coory
-        cor = np.hstack([cor, post_proc.infer_coory(cor[:, 1], z1 - z0, z0)[:, None]])
-        # print(cor.shape)
     # Collect corner position in equirectangular
     cor_id = np.zeros((len(cor)*2, 2), np.float32)
     for j in range(len(cor)):
@@ -289,7 +89,7 @@ def inference(net, doornet, x, device, flip=False, rotate=[], visualize=False,
     cor_id[:, 0] /= W
     cor_id[:, 1] /= H
 
-    return cor_id, z0, z1, vis_out
+    return cor_id, vis_out
 
 if __name__ == '__main__':
 

@@ -366,8 +366,6 @@ class ZInD_UnSupSet(data.Dataset):
             xmin, ymin, xmax, ymax = 0.8, 0.8, 8., 8.
             kx = np.random.uniform(1.0, self.max_stretch)
             ky = np.random.uniform(1.0, self.max_stretch)
-            # kx = max(1 / kx, min(0.5 / xmin, 1.0))
-            # ky = max(1 / ky, min(0.5 / ymin, 1.0))
             if np.random.randint(2) == 0:
                 kx = max(1 / kx, min(0.5 / xmin, 1.0))
             else:

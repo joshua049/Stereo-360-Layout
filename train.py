@@ -55,9 +55,10 @@ def nan_to_num(x):
 
 def clip_bon(bon, H):
     # bon.shape = (N, 2, 1024)
-    margin = 15
-    ceil = torch.clamp(bon[:, 0, :], 2, H/2 - margin)
-    floor = torch.clamp(bon[:, 1, :], H/2 + margin, H-2)
+    topbot_margin = 2
+    mid_margin = 15
+    ceil = torch.clamp(bon[:, 0, :], topbot_margin, H/2 - mid_margin)
+    floor = torch.clamp(bon[:, 1, :], H/2 + mid_margin, H-topbot_margin)
 
     return torch.stack((ceil, floor), dim=1)
 
@@ -94,7 +95,7 @@ def unsup_feed_forward(args, net, params, single=False, epoch=0):
     target_transformer = Transformation2D(rotation_matrix=target_rotation_matrix, scale=target_scale[:, :, None], translation=target_translation)
     losses = {'main': None, 'aux': {}} 
 
-    y_bon_ori = net(target_img)
+    y_bon_ori = nan_to_num(net(target_img))
     y_bon = (y_bon_ori / 2 + 0.5) * H - 0.5
     y_bon = clip_bon(y_bon, H)
          
@@ -119,7 +120,7 @@ def unsup_feed_forward(args, net, params, single=False, epoch=0):
     target_global_2d = compute_global(y_bon, target_transformer, H, W, ceiling_z)   
 
     if not args.no_cycle:
-        pseudo_y_bon_ori = net(warp_img.detach())
+        pseudo_y_bon_ori = nan_to_num(net(warp_img.detach()))
         pseudo_y_bon = (pseudo_y_bon_ori / 2 + 0.5) * H - 0.5
         pseudo_y_bon = clip_bon(pseudo_y_bon, H)    
 
@@ -148,11 +149,11 @@ def unsup_feed_forward(args, net, params, single=False, epoch=0):
 
     if not args.no_stretchaug:
         target_local_stretch = target_local_2d * stretch_k[:, None, :]    
-        stretched_y_bon_ = net(stretched_target_img)
-        stretched_y_bon_ = (stretched_y_bon_ / 2 + 0.5) * H - 0.5  
+        stretched_y_bon = nan_to_num(net(stretched_target_img))
+        stretched_y_bon_ = (stretched_y_bon / 2 + 0.5) * H - 0.5  
         stretched_y_bon_ = clip_bon(stretched_y_bon_, H)
         target_local_stretch_ = compute_local(stretched_y_bon_, H, W, ceiling_z)
-        losses['aux']['stretch'] = chamfer_distance(target_local_stretch.detach(), target_local_stretch_)[0]  
+        losses['aux']['stretch'] = F.mse_loss(target_local_stretch.detach(), target_local_stretch_)  
 
     losses['total'] = losses['main'] + 0.1 * sum(losses['aux'].values())
 
@@ -369,9 +370,10 @@ if __name__ == '__main__':
 
     # Init variable
     args.epochs = args.sup_epochs + args.unsup_epochs
-    args.warmup_iters = args.warmup_epochs * (len(sup_loader_train))
-    args.max_iters = args.epochs * (len(sup_loader_train))
-    args.running_lr = args.warmup_lr if args.warmup_epochs > 0 else args.lr
+    if not args.eval_only:    
+        args.warmup_iters = args.warmup_epochs * (len(sup_loader_train))
+        args.max_iters = args.epochs * (len(sup_loader_train))
+        args.running_lr = args.warmup_lr if args.warmup_epochs > 0 else args.lr
     
     args.cur_iter = 0
     args.best_valid_score = -1
@@ -462,7 +464,7 @@ if __name__ == '__main__':
                 ])
 
                 try:
-                    dt_cor_id = inference(net, doornet, x, device, force_cuboid=False, force_raw=True)[0]
+                    dt_cor_id = inference(net, x, device)[0]
                     dt_cor_id[:, 0] *= 1024
                     dt_cor_id[:, 1] *= 512
                 except Exception as e:
