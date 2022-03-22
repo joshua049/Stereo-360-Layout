@@ -15,47 +15,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# from model_ori import HorizonNet
-from model import HorizonNet, DoorNet
+from model import HorizonNet
 from dataset import visualize_a_data
 from misc import post_proc, panostretch, utils
 from eval_general import test_general
-
-
-
-
-def augment(x_img, flip, rotate):
-    x_img = x_img.numpy()
-    aug_type = ['']
-    x_imgs_augmented = [x_img]
-    if flip:
-        aug_type.append('flip')
-        x_imgs_augmented.append(np.flip(x_img, axis=-1))
-    for shift_p in rotate:
-        shift = int(round(shift_p * x_img.shape[-1]))
-        aug_type.append('rotate %d' % shift)
-        x_imgs_augmented.append(np.roll(x_img, shift, axis=-1))
-    return torch.FloatTensor(np.concatenate(x_imgs_augmented, 0)), aug_type
-
-
-def augment_undo(x_imgs_augmented, aug_type):
-    x_imgs_augmented = x_imgs_augmented.cpu().numpy()
-    sz = x_imgs_augmented.shape[0] // len(aug_type)
-    x_imgs = []
-    for i, aug in enumerate(aug_type):
-        x_img = x_imgs_augmented[i*sz : (i+1)*sz]
-        if aug == 'flip':
-            x_imgs.append(np.flip(x_img, axis=-1))
-        elif aug.startswith('rotate'):
-            shift = int(aug.split()[-1])
-            x_imgs.append(np.roll(x_img, -shift, axis=-1))
-        elif aug == '':
-            x_imgs.append(x_img)
-        else:
-            raise NotImplementedError()
-
-    return np.array(x_imgs)
-
 
 def inference(net, x, device, visualize=False):
     '''
@@ -172,25 +135,7 @@ if __name__ == '__main__':
             img_ori = np.array(img_pil)[..., :3].transpose([2, 0, 1]).copy()
             x = torch.FloatTensor([img_ori / 255])
 
-            # try:
-            #     # Inferenceing corners
-            #     cor_id, z0, z1, vis_out = inference(net, x, device,
-            #                                         args.flip, args.rotate,
-            #                                         args.visualize,
-            #                                         args.force_cuboid,
-            #                                         args.min_v, args.r)
-                
-            
-                
-            # except:
-            #     pass
-            cor_id, z0, z1, vis_out = inference(net, doornet, x, device,
-                                                    args.flip, args.rotate,
-                                                    args.visualize,
-                                                    True,
-                                                    args.force_cuboid,
-                                                    args.min_v, args.r)
-
+            cor_id, z0, z1, vis_out = inference(net, x, device)
             cor_id[:, 0] *= 1024
             cor_id[:, 1] *= 512
 
@@ -200,8 +145,6 @@ if __name__ == '__main__':
             test_general(cor_id, gt_cor_id, 1024, 512, losses)
 
             last_score = losses['overall']['3DIoU'][-1]
-            # print(cor_id, gt_cor_id)
-            # print(last_score)
             
             # Output resultrm 
             with open(os.path.join(args.output_dir, k + '.json'), 'w') as f:

@@ -1,11 +1,7 @@
 import os
-import sys
 import argparse
-import pdb
 import numpy as np
-import json
 from tqdm import trange
-from copy import deepcopy
 from tensorboardX import SummaryWriter
 
 import torch
@@ -157,7 +153,7 @@ def unsup_feed_forward(args, net, params, single=False, epoch=0):
     losses['total'] = losses['main'] + 0.1 * sum(losses['aux'].values())
 
     return losses
-    
+
 
 if __name__ == '__main__':
 
@@ -302,6 +298,7 @@ if __name__ == '__main__':
                                     worker_init_fn=lambda x: np.random.seed())
             if args.sup_epochs == 0:
                 args.sup_epochs = 100
+            print('Sup:', len(sup_dataset_train))
 
         if args.unsup_root_dir is not None:
             unsup_dataset_train = ZInD_UnSupSet(
@@ -317,9 +314,7 @@ if __name__ == '__main__':
                                     worker_init_fn=lambda x: np.random.seed())
             if args.unsup_epochs == 0:
                 args.unsup_epochs = 20
-
-        print('Sup:', len(sup_dataset_train))
-        print('UnSup:', len(unsup_dataset_train))
+            print('UnSup:', len(unsup_dataset_train))
 
     print('Valid:', len(dataset_valid))
 
@@ -413,7 +408,7 @@ if __name__ == '__main__':
                     nn.utils.clip_grad_norm_(net.parameters(), 3.0, norm_type='inf')
                     optimizer.step()
             
-            if args.sup_root_dir is not None and ith_epoch > args.epochs // 2:
+            else:
                 iterator_train = iter(sup_loader_train)
                 for _ in trange(len(sup_loader_train),
                                 desc='Sup Train ep%s' % ith_epoch, position=1):
@@ -436,8 +431,6 @@ if __name__ == '__main__':
                     loss.backward()
                     nn.utils.clip_grad_norm_(net.parameters(), 3.0, norm_type='inf')
                     optimizer.step()
-
-
         
         # Valid phase
         net.eval()

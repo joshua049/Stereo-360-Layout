@@ -1,4 +1,5 @@
 import os
+import shutil
 import glob
 import json
 import argparse
@@ -61,12 +62,9 @@ if __name__ == '__main__':
         pair_dir = os.path.join(label_dir, 'paired')
         
         if os.path.isdir(label_dir):
-            cmd = f'rm -rf {label_dir}'
-            os.system(cmd)
+            shutil.rmtree(label_dir)
 
         os.mkdir(label_dir)        
-        # os.mkdir(single_dir)
-        # os.mkdir(pair_dir)
         scene_id = os.path.basename(dirname)    
         
         merger = data['merger']
@@ -104,8 +102,7 @@ if __name__ == '__main__':
                             np.savetxt(txt_filename, cor, delimiter=' ', fmt='%d')
                             json_filename = os.path.join(label_dir, f'{file_prefix}.json')
                             with open(json_filename, 'w') as f: json.dump(pano_data, f)
-
                             num += 1
                             
-    print(num)
+    print(f'Number of Data: {num}')
     
