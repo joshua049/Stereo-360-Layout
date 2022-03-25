@@ -418,7 +418,6 @@ if __name__ == '__main__':
                     adjust_learning_rate(optimizer, args)
 
                     args.cur_iter += 1
-                    # print('*'*30, args.cur_iter, '*'*30)
                     x, y_bon, y_cor = next(iterator_train)
 
                     losses = sup_feed_forward(net, x, y_bon, y_cor)
