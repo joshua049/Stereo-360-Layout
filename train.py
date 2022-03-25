@@ -195,8 +195,10 @@ if __name__ == '__main__':
                         help='disable pano stretch')
     parser.add_argument('--num_workers', default=6, type=int,
                         help='numbers of workers for dataloaders')
-    parser.add_argument('--num_mp3d', default=None, type=int,
-                        help='number of mp3d_layout data')
+    parser.add_argument('--sample_num', default=None, type=int,
+                        help='number of sampled data')
+    parser.add_argument('--sample_file', default=None, type=str,
+                        help='sample csv file')
     # DLVR related arguments
     parser.add_argument('--no_validity', action='store_true',
                         help='remove validity mask')
@@ -289,7 +291,7 @@ if __name__ == '__main__':
                     root_dir=args.sup_root_dir,
                     flip=not args.no_flip, rotate=not args.no_rotate, gamma=not args.no_gamma,
                     stretch=not args.no_pano_stretch,
-                    sample_num=None)
+                    sample_num=args.sample_num, sample_file=args.sample_file)
 
             sup_loader_train = DataLoader(sup_dataset_train, args.batch_size_train,
                                     shuffle=True, drop_last=True,

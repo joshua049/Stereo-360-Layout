@@ -26,20 +26,21 @@ class PanoCorBonDataset(data.Dataset):
                  flip=False, rotate=False, gamma=False, stretch=False,
                  p_base=0.96, max_stretch=2.0,
                  normcor=False, return_cor=False, return_path=False, 
-                 sample_num=None, labeled=True, teach=False):
+                 sample_num=None, sample_file=None):
         self.img_dir = os.path.join(root_dir, 'img')
         self.cor_dir = os.path.join(root_dir, 'label_cor')
         
         if sample_num is not None:
-            assert sample_num in [50, 100, 200, 400]
-            split_data = pd.read_csv('matterport_train_splits.csv')         
+            split_data = pd.read_csv(sample_file)         
+            assert str(sample_num) in split_data.columns, sample_num
+
             self.img_fnames = sorted([
-                f'{fname}.png' for fname in split_data['fileid'][split_data[str(sample_num)]==int(labeled)]
+                f'{fname}.png' for fname in split_data['fileid'][split_data[str(sample_num)]==1]
             ])
         else:
             self.img_fnames = sorted([
                 fname for fname in os.listdir(self.img_dir)
-                if fname.endswith('.jpg') or fname.endswith('.png')
+                if fname.endswith('.png')
             ])
 
         self.txt_fnames = ['%s.txt' % fname[:-4] for fname in self.img_fnames]
@@ -52,7 +53,6 @@ class PanoCorBonDataset(data.Dataset):
         self.normcor = normcor
         self.return_cor = return_cor
         self.return_path = return_path
-        self.teach = teach
 
         self._check_dataset()
 
@@ -179,13 +179,6 @@ class ZInD_SupSet(data.Dataset):
         self.normcor = normcor
         self.return_cor = return_cor
         self.return_path = return_path
-
-        self._check_dataset()
-
-    def _check_dataset(self):
-        for fname in self.label_fnames:
-            assert os.path.isfile(fname),\
-                '%s not found' % fname
 
     def __len__(self):
         return len(self.label_fnames)
@@ -317,13 +310,6 @@ class ZInD_UnSupSet(data.Dataset):
         self.normcor = normcor
         self.return_cor = return_cor
         self.return_path = return_path       
-        
-        # self._check_dataset() 
-
-    def _check_dataset(self):
-        for src_path, target_path in self.scenes:
-            assert os.path.isfile(os.path.join(self.cor_dir, fname)),\
-                '%s not found' % os.path.join(self.cor_dir, fname)
 
     def __len__(self):
         return len(self.scenes)
