@@ -1,6 +1,9 @@
 # Stereo-360-Layout
 This is the implementation of [arxiv link]
 
+## Overview
+![](https://i.imgur.com/fOyeHXW.jpg)
+
 ## Installation
 For PyTorch and PyTorch3d, please follow the instructions below:
 ```
