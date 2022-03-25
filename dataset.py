@@ -491,8 +491,6 @@ def visualize_a_data(x, y_bon, y_cor):
     x = (x.numpy().transpose([1, 2, 0]) * 255).astype(np.uint8)
     y_bon = y_bon.numpy()
     y_bon = np.clip(((y_bon / 2 + 0.5) * x.shape[0]-1).round().astype(int), 0, x.shape[0]-1)
-    # y_bon = np.clip(((y_bon / np.pi + 0.5) * x.shape[0]-1).round().astype(int), 0, x.shape[0]-1)
-    # print(y_bon)
     y_cor = y_cor.numpy()
 
     gt_cor = np.zeros((30, 1024, 3), np.uint8)
@@ -509,20 +507,13 @@ def visualize_a_data(x, y_bon, y_cor):
 
     return np.concatenate([gt_cor, img_pad, img_bon], 0)
 
-
-def visualize_door(x, door_bar):
-
-    gt_door = np.zeros((30, 1024, 3), np.uint8)
-    gt_door[:] = door_bar[0][None, :, None] * 255
-
-
 if __name__ == '__main__':
 
     import argparse
     from tqdm import tqdm
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--root_dir', default='data/valid/')
+    parser.add_argument('--root_dir', required=True)
     parser.add_argument('--ith', default=0, type=int,
                         help='Pick a data id to visualize.'
                              '-1 for visualize all data')
@@ -543,23 +534,17 @@ if __name__ == '__main__':
     for key, val in vars(args).items():
         print('    {:16} {}'.format(key, val))
 
-    # dataset = PanoCorBonDataset(
-    #     root_dir=args.root_dir,
-    #     flip=args.flip, rotate=args.rotate, gamma=args.gamma, stretch=args.stretch,
-    #     return_path=True)
-
-    dataset = ZillowIndoorDoorDataset(
-        root_dir=args.root_dir, subject='val', 
-        flip=False, rotate=False, gamma=False,
-        stretch=False, return_path=True)
+    dataset = PanoCorBonDataset(
+        root_dir=args.root_dir,
+        flip=args.flip, rotate=args.rotate, gamma=args.gamma, stretch=args.stretch,
+        return_path=True)
 
     # Showing some information about dataset
     print('len(dataset): {}'.format(len(dataset)))
-    # x, y_bon, y_cor, path = dataset[0]
-    x, door_bar = dataset[0]
+    x, y_bon, y_cor, path = dataset[0]
     print('x', x.size())
-    print('door_bar', y_bon.size())
-    # print('y_cor', y_cor.size())
+    print('y_bon', y_bon.size())
+    print('y_cor', y_cor.size())
 
     if args.ith >= 0:
         to_visualize = [dataset[args.ith]]
@@ -567,7 +552,6 @@ if __name__ == '__main__':
         to_visualize = dataset
 
     for x, y_bon, y_cor, path in tqdm(to_visualize):
-        print(path)
         fname = os.path.split(path)[-1]
         out = visualize_a_data(x, y_bon, y_cor)
         Image.fromarray(out).save(os.path.join(args.out_dir, fname))

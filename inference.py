@@ -28,8 +28,9 @@ def inference(net, x, device, visualize=False):
 
     H, W = tuple(x.shape[2:])
 
-    # Network feedforward (with testing augmentation)
+    # Network feedforward 
     y_bon_ = net(x.to(device)).detach().cpu()
+    y_cor_ = torch.zeros(1, 1, W)
 
     # Visualize raw model output
     if visualize:
@@ -65,18 +66,6 @@ if __name__ == '__main__':
                              'or you should use preporcess.py to do so.')
     parser.add_argument('--output_dir', required=True)
     parser.add_argument('--visualize', action='store_true')
-    # Augmentation related
-    parser.add_argument('--flip', action='store_true',
-                        help='whether to perfome left-right flip. '
-                             '# of input x2.')
-    parser.add_argument('--rotate', nargs='*', default=[], type=float,
-                        help='whether to perfome horizontal rotate. '
-                             'each elements indicate fraction of image width. '
-                             '# of input xlen(rotate).')
-    # Post-processing realted
-    parser.add_argument('--r', default=0.05, type=float)
-    parser.add_argument('--min_v', default=None, type=float)
-    parser.add_argument('--force_cuboid', action='store_true')
     # Misc arguments
     parser.add_argument('--no_cuda', action='store_true',
                         help='disable cuda')
@@ -96,80 +85,33 @@ if __name__ == '__main__':
     device = torch.device('cpu' if args.no_cuda else 'cuda')
 
     # Loaded trained model
-    # net = HorizonNet('resnet50', True).to(device)
     net = utils.load_trained_model(HorizonNet, args.pth).to(device)
     net.eval()
 
-    doornet = DoorNet()
-    doornet.load_state_dict(torch.load('./ckpt/door_sub/best.pth')['state_dict'])
-
-    gaussian_kernel = get_gaussian_kernel(15, 3)
-
-    # Testing
-    losses = dict([
-        (n_corner, {'2DIoU': [], '3DIoU': [], 'rmse': [], 'delta_1': []})
-        for n_corner in ['4', '6', '8', '10+', 'odd', 'overall']
-    ])
-
     # Inferencing
     with torch.no_grad():
-        idx = 0
         for i_path in tqdm(paths, desc='Inferencing'):
-            # if idx > 2000:
-            #     break
-
-            # zind
             k = os.path.split(i_path)[-1][:-4]
-            scene_id = os.path.basename(os.path.abspath(os.path.join(i_path, '../../')))
-            img_path = os.path.abspath(os.path.join(i_path, '../../panos', f'{k}.jpg'))
-
-            # mp3d
-            k = os.path.split(i_path)[-1][:-4]
-            img_path = os.path.abspath(os.path.join(i_path, '../img', f'{k}.png'))
-
 
             # Load image
-            img_pil = Image.open(img_path)
+            img_pil = Image.open(i_path)
             if img_pil.size != (1024, 512):
                 img_pil = img_pil.resize((1024, 512), Image.BICUBIC)
             img_ori = np.array(img_pil)[..., :3].transpose([2, 0, 1]).copy()
             x = torch.FloatTensor([img_ori / 255])
 
-            cor_id, z0, z1, vis_out = inference(net, x, device)
-            cor_id[:, 0] *= 1024
-            cor_id[:, 1] *= 512
+            # Inferenceing corners
+            cor_id, vis_out = inference(net=net, x=x, device=device, visualize=args.visualize)
 
-            
-            with open(i_path) as f:
-                gt_cor_id = np.array([l.split() for l in f], np.float32)
-            test_general(cor_id, gt_cor_id, 1024, 512, losses)
-
-            last_score = losses['overall']['3DIoU'][-1]
-            
-            # Output resultrm 
+            # Output result
             with open(os.path.join(args.output_dir, k + '.json'), 'w') as f:
                 json.dump({
-                    'z0': float(z0),
-                    'z1': float(z1),
                     'uv': [[float(u), float(v)] for u, v in cor_id],
                 }, f)
-            idx += 1
-            if last_score < 0.5 and vis_out is not None:
-                vis_path = os.path.join(args.output_dir, f'{scene_id}_{k}.raw.png')
-                # print(vis_path)
+
+            if vis_out is not None:
+                vis_path = os.path.join(args.output_dir, k + '.raw.png')
                 vh, vw = vis_out.shape[:2]
                 Image.fromarray(vis_out)\
-                    .resize((vw//2, vh//2), Image.LANCZOS)\
-                    .save(vis_path)
-        for k, result in losses.items():
-            iou2d = np.array(result['2DIoU'])
-            iou3d = np.array(result['3DIoU'])
-            rmse = np.array(result['rmse'])
-            delta_1 = np.array(result['delta_1'])
-            if len(iou2d) == 0:
-                continue
-            print('GT #Corners: %s  (%d instances)' % (k, len(iou2d)))
-            print('    2DIoU  : %.2f' % (iou2d.mean() * 100))
-            print('    3DIoU  : %.2f' % (iou3d.mean() * 100))
-            print('    RMSE   : %.2f' % (rmse.mean()))
-            print('    delta^1: %.2f' % (delta_1.mean()))
+                     .resize((vw//2, vh//2), Image.LANCZOS)\
+                     .save(vis_path)

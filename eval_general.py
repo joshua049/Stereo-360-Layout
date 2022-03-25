@@ -5,8 +5,6 @@ import argparse
 import numpy as np
 from tqdm import tqdm
 from shapely.geometry import Polygon
-
-from eval_cuboid import prepare_gtdt_pairs
 from dataset import cor_2_1d
 from misc import post_proc
 
