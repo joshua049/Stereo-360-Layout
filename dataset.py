@@ -18,10 +18,6 @@ from misc import panostretch
 from transformations_torch import *
 
 class PanoCorBonDataset(data.Dataset):
-    '''
-    See README.md for how to prepare the dataset.
-    '''
-
     def __init__(self, root_dir, subject=None,
                  flip=False, rotate=False, gamma=False, stretch=False,
                  p_base=0.96, max_stretch=2.0,
@@ -259,7 +255,6 @@ class ZInD_SupSet(data.Dataset):
         x = torch.FloatTensor(img.transpose([2, 0, 1]).copy())
         bon = torch.FloatTensor(bon.copy())
         y_cor = torch.FloatTensor(y_cor.copy())
-        # print(bon.shape, y_cor.shape)
 
         # Check whether additional output are requested
         out_lst = [x, bon, y_cor]
@@ -411,8 +406,7 @@ def cor_2_1d(cor, H, W):
     
     bon_floor_x, bon_floor_y = sort_xy_filter_unique(bon_floor_x, bon_floor_y, y_small_first=False)
     bon[1] = np.interp(np.arange(W), bon_floor_x, bon_floor_y, period=W)       
-    
-    # bon = ((bon + 0.5) / H - 0.5) * np.pi
+
     bon = ((bon + 0.5) / H - 0.5) * 2
     return bon
 
