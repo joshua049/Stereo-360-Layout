@@ -7,38 +7,6 @@ import numpy as np
 from transformations_np import TransformationSpherical, Transformation3D
 from tqdm import tqdm
 
-def is_loop_closure_line(width: int, pt1: np.ndarray, pt2: np.ndarray):
-    """Check if a given line is a "loop closure line", meaning that it's rendering on the pano texture would
-    wrap around the left/right border.
-    """
-    pt1 = pt1.reshape(1, 3)
-    pt2 = pt2.reshape(1, 3)
-
-    pt1_pix = TransformationSpherical.cartesian_to_pixel(pt1, width)
-    pt2_pix = TransformationSpherical.cartesian_to_pixel(pt2, width)
-
-    mid_pt = 0.5 * (pt1 + pt2)
-    mid_pt /= np.linalg.norm(mid_pt)
-
-    mid_pt_pix = TransformationSpherical.cartesian_to_pixel(mid_pt, width)
-
-    dist_total = abs(pt1_pix[0, 0] - pt2_pix[0, 0])
-    dist_left = abs(pt1_pix[0, 0] - mid_pt_pix[0, 0])
-    dist_right = abs(pt2_pix[0, 0] - mid_pt_pix[0, 0])
-
-    return dist_total > width / 2.0 or dist_left + dist_right > dist_total + 1
-
-def split_index(width, vertices):
-    num_vertices = vertices.shape[0]
-    for i in range(1, num_vertices):
-        pt1 = vertices[i-1]
-        pt2 = vertices[i]
-        
-        if is_loop_closure_line(width, pt1, pt2):
-            return i
-    return -1
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--src', required=True,
@@ -80,11 +48,6 @@ if __name__ == '__main__':
 
                             xyz_floor, xyz_ceil = Transformation3D(ceiling_height, camera_height).to_3d(vertices)
                             
-                            idx = split_index(1024, xyz_floor)
-                            if idx >= 0:
-                                xyz_floor = np.concatenate([xyz_floor[idx:], xyz_floor[:idx]])
-                                xyz_ceil = np.concatenate([xyz_ceil[idx:], xyz_ceil[:idx]])
-                            
                             xyz_floor = xyz_floor[::-1]
                             xyz_ceil = xyz_ceil[::-1]                        
                             
@@ -92,7 +55,9 @@ if __name__ == '__main__':
                             xyzs[0::2] = xyz_ceil
                             xyzs[1::2] = xyz_floor
 
-                            cor = TransformationSpherical.cartesian_to_pixel(xyzs, 1024).astype(int)                           
+                            cor = TransformationSpherical.cartesian_to_pixel(xyzs, 1024).astype(int) 
+                             
+                            cor = np.roll(cor[:, :2], -2 * np.argmin(cor[::2, 0]), 0)                         
 
                             file_prefix = f'{floor_id}_{partial_room_id}_{pano_id}'
                             if pano_data['is_primary']:

@@ -291,7 +291,7 @@ if __name__ == '__main__':
                     stretch=not args.no_pano_stretch,
                     sample_num=None)
 
-            sup_loader_train = DataLoader(sup_dataset_train, args.batch_size_train * 4,
+            sup_loader_train = DataLoader(sup_dataset_train, args.batch_size_train,
                                     shuffle=True, drop_last=True,
                                     num_workers=args.num_workers,
                                     pin_memory=not args.no_cuda,

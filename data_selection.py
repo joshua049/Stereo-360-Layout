@@ -1,13 +1,21 @@
 import os
+import argparse
+from tqdm import trange
 import pandas as pd
 import numpy as np
-from DLVR import compute_local
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from misc.utils import load_trained_model
+from DLVR import compute_local, inference_ceiling
+from model import HorizonNet
+from dataset import PanoCorBonDataset
 
 def calc_score(net, x):    
     N, C, H, W = x.shape
     y_bon_ori = net(x)
     y_bon = (y_bon_ori / 2 + 0.5) * H - 0.5
-    ceiling_z = guess_ceiling(y_bon, H, W)
+    ceiling_z = inference_ceiling(y_bon, H, W)
     target_local_2d = compute_local(y_bon, H, W, ceiling_z[None])
     
     kernel_size = 15
@@ -29,7 +37,7 @@ if __name__ == '__main__':
                         help='Path to the dataset to be split')
     parser.add_argument('--stored_file', required=True,
                         help='Path to store the split result')
-    parser.add_argument('--pth', action='store_true',
+    parser.add_argument('--pth', 
                         help='If given, conduct the active selection based on the provided weight.')                    
     parser.add_argument('--no_cuda', action='store_true',
                         help='disable cuda')
@@ -54,7 +62,7 @@ if __name__ == '__main__':
             x = x[None]
             x = x.to(device)
             with torch.no_grad():
-                score = calc_score(net, x, criterion)
+                score = calc_score(net, x)
                 fileids.append(fileid)
                 scores.append(score.item())
         scores = np.array(scores)
