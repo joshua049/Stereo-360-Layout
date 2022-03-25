@@ -18,7 +18,7 @@ For MatterportLayout, we follow the preparation on HorizonNet, please refer to [
 For ZInD, You can preprocess it with our provided script `preprocess_zind.py`.
 
 ## Data Selection
-For active data selection, just execute `data_selection.py`. The script will evaluate each sample with our proposed label-free metric with the pretrained weight provided in argument `--pth`. If the path of pretrained weight is not provided, data will be sampled randomly.
+For active data selection, just execute `data_selection.py`. The script will evaluate each sample with our proposed label-free metric with the pretrained weight provided in argument `--pth`. If the path of pretrained weight is not provided, data will be sampled randomly. The sample result will be recorded in the argument `--stored_file`.
 
 ## Training
 ```
@@ -29,5 +29,5 @@ python train.py --id [yourname] --valid_root_dir /path/to/valid
     - `--sup_root_dir`: Root directory to supervised training dataset. 
     - `--valid_root_dir`: Root directory to validation dataset.
     - `--sample_num`: Number of sampled data for supervised training.
-    - `--sample_file`: The csv file for data selection.
+    - `--sample_file`: The csv file for data selection (generated from `data_selection.py`).
     - `--eval_only`: evaluate on the valid dataset only.
