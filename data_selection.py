@@ -47,7 +47,7 @@ if __name__ == '__main__':
     dataset = PanoCorBonDataset(
         root_dir=args.root_dir, return_path=True)
     
-    select_num = [50, 100, 200, 400, 1650]
+    select_num = [50, 100, 200, 400]
     if args.pth is not None: # Active Selection
         print('Finetune model is given.')
         print('Ignore --backbone and --no_rnn')
