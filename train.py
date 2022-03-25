@@ -95,7 +95,7 @@ def unsup_feed_forward(args, net, params):
     y_bon = clip_bon(y_bon, H)
          
     if args.no_ceiling_ann:
-        ceiling_z = guess_ceiling(y_bon, H, W).reshape(ceiling_height.shape)
+        ceiling_z = inference_ceiling(y_bon, H, W).reshape(ceiling_height.shape)
     else:
         ceiling_z = ceiling_height - 1.
 
