@@ -70,7 +70,7 @@ def sup_feed_forward(net, x, y_bon, y_cor):
 
     return losses
 
-def unsup_feed_forward(args, net, params, single=False, epoch=0):
+def unsup_feed_forward(args, net, params):
 
     src_img, src_rotation_matrix, src_scale, src_translation, target_img, target_rotation_matrix, target_scale, target_translation, stretched_src_img, stretched_target_img, stretch_k, ceiling_height = params 
     src_img = src_img.to(device)
@@ -391,7 +391,7 @@ if __name__ == '__main__':
 
                     args.cur_iter += 1
                     params = next(iterator_train)
-                    losses = unsup_feed_forward(args, net, params, epoch=ith_epoch)
+                    losses = unsup_feed_forward(args, net, params)
                         
                     for k, v in losses.items():
                         if isinstance(v, dict):
