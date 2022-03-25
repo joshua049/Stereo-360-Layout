@@ -121,6 +121,20 @@ def test_general(dt_cor_id, gt_cor_id, w, h, losses):
     losses['overall']['rmse'].append(rmse)
     losses['overall']['delta_1'].append(delta_1)
 
+
+def prepare_gtdt_pairs(gt_glob, dt_glob):
+    gt_paths = sorted(glob.glob(gt_glob))
+    dt_paths = dict([(os.path.split(v)[-1].split('.')[0], v)
+                     for v in glob.glob(dt_glob) if v.endswith('json')])
+
+    gtdt_pairs = []
+    for gt_path in gt_paths:
+        k = os.path.split(gt_path)[-1].split('.')[0]
+        if k in dt_paths:
+            gtdt_pairs.append((gt_path, dt_paths[k]))
+
+    return gtdt_pairs
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
