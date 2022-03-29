@@ -43,12 +43,16 @@ For active data selection, just execute `data_selection.py`. The script will eva
     ```
     python train.py --id [yourid] --unsup_root_dir /path/to/unsup --valid_root_dir /path/to/valid --no_[loss_to_disable]
     ```
-- supervised finetune only
+- supervised only
     - normal
+    ```
+    python train.py --id [yourid] --sup_root_dir /path/to/sup --valid_root_dir /path/to/valid 
+    ```
+    - finetune on your checkpoint
     ```
     python train.py --id [yourid] --sup_root_dir /path/to/sup --valid_root_dir /path/to/valid --pth /path/to/ckpt
     ```
-    - finetune with partial data
+    - finetune on your checkpoint with partial data
     ```
     python train.py --id [yourid] --sup_root_dir /path/to/sup --valid_root_dir /path/to/valid --pth /path/to/ckpt --sample_num [your_num] --sample_file /path/to/splits
     ```
