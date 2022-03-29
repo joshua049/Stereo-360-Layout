@@ -19,6 +19,7 @@ Other needed package are provided in `requirements.txt`, you can install them vi
 For MatterportLayout, we follow the preparation on HorizonNet, please refer to [here](https://github.com/sunset1995/HorizonNet/blob/master/README_PREPARE_DATASET.md) for detailed.
 
 For ZInD, You can preprocess it with our provided script `preprocess_zind.py`.
+Besides, to make our custom dataset work, you have to copy the `room_shape_simplicity_labels.json` from [ZInD repo](https://github.com/zillow/zind) to the root of ZInD dataset on your device.
 
 ## Data Selection
 For active data selection, just execute `data_selection.py`. The script will evaluate each sample with our proposed label-free metric with the pretrained weight provided in argument `--pth`. If the path of pretrained weight is not provided, data will be sampled randomly. The sample result will be recorded in the argument `--stored_file`.
@@ -34,3 +35,32 @@ python train.py --id [yourname] --valid_root_dir /path/to/valid
     - `--sample_num`: Number of sampled data for supervised training.
     - `--sample_file`: The csv file for data selection (generated from `data_selection.py`).
     - `--eval_only`: evaluate on the valid dataset only.
+
+### Examples
+- self-supervised only
+    - normal
+    ```
+    python train.py --id [yourid] --unsup_root_dir /path/to/unsup --valid_root_dir /path/to/valid
+    ```
+    - disable some losses
+    ```
+    python train.py --id [yourid] --unsup_root_dir /path/to/unsup --valid_root_dir /path/to/valid --no_[loss_to_disable]
+    ```
+- supervised finetune only
+    - normal
+    ```
+    python train.py --id [yourid] --sup_root_dir /path/to/sup --valid_root_dir /path/to/valid --pth /path/to/ckpt
+    ```
+    - finetune with partial data
+    ```
+    python train.py --id [yourid] --sup_root_dir /path/to/sup --valid_root_dir /path/to/valid --pth /path/to/ckpt --sample_num [your_num] --sample_file /path/to/splits
+    ```
+- self-pretrained + finetune
+```
+python train.py --id [yourid] --sup_root_dir /path/to/sup --unsup_root_dir /path/to/unsup --valid_root_dir /path/to/valid
+```
+- evaluation
+```
+python train.py --id [yourid] --valid_root_dir /path/to/valid --eval_only
+```
+
