@@ -44,7 +44,7 @@ For active data selection, just execute `data_selection.py`. The script will eva
     python train.py --id [yourid] --unsup_root_dir /path/to/unsup --valid_root_dir /path/to/valid --no_[loss_to_disable]
     ```
 - supervised only
-    - normal
+    - normal (train from scratch)
     ```
     python train.py --id [yourid] --sup_root_dir /path/to/sup --valid_root_dir /path/to/valid 
     ```
