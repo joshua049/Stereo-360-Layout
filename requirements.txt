@@ -1,7 +1,10 @@
 numpy
 open3d
 pandas
-Pillow
+Pillow==6.2
+scikit-learn
+scipy
+matplotlib
 tensorboardX
 shapely
 tqdm
