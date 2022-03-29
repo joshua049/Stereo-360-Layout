@@ -25,9 +25,6 @@ Besides, to make our custom dataset work, you have to copy the `room_shape_simpl
 For active data selection, just execute `data_selection.py`. The script will evaluate each sample with our proposed label-free metric with the pretrained weight provided in argument `--pth`. If the path of pretrained weight is not provided, data will be sampled randomly. The sample result will be recorded in the argument `--stored_file`.
 
 ## Training
-```
-python train.py --id [yourname] --valid_root_dir /path/to/valid
-```
 - arguments
     - `--unsup_root_dir`: Root directory to unsupervised training dataset.
     - `--sup_root_dir`: Root directory to supervised training dataset. 
