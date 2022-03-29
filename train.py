@@ -275,9 +275,11 @@ if __name__ == '__main__':
         stretch=False)
 
     if args.eval_only:
-        args.sup_epochs = 1
+        args.sup_epochs = 1        
 
     else:
+        assert args.sup_root_dir is not None or args.unsup_root_dir is not None
+
         if args.sup_root_dir is not None: 
             dataset_name = os.path.basename(args.sup_root_dir) 
             if dataset_name == 'zind':    
@@ -363,10 +365,14 @@ if __name__ == '__main__':
     # Init variable
     args.epochs = args.sup_epochs + args.unsup_epochs
     if not args.eval_only:    
-        args.warmup_iters = args.warmup_epochs * (len(sup_loader_train))
-        args.max_iters = args.epochs * (len(sup_loader_train))
-        args.running_lr = args.warmup_lr if args.warmup_epochs > 0 else args.lr
+        try:
+            args.warmup_iters = args.warmup_epochs * (len(sup_loader_train))
+            args.max_iters = args.epochs * (len(sup_loader_train))
+        except:
+            args.warmup_iters = args.warmup_epochs * (len(unsup_loader_train))
+            args.max_iters = args.epochs * (len(unsup_loader_train))
     
+    args.running_lr = args.warmup_lr if args.warmup_epochs > 0 else args.lr    
     args.cur_iter = 0
     args.best_valid_score = -1
 
