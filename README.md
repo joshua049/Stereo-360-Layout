@@ -1,5 +1,5 @@
 # Stereo-360-Layout
-This is the implementation of [arxiv link]
+This is the implementation of our [paper](https://arxiv.org/abs/2203.16057)
 
 ## Overview
 ![](https://i.imgur.com/fOyeHXW.jpg)
