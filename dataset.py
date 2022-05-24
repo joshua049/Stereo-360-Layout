@@ -143,8 +143,6 @@ class PanoCorBonDataset(data.Dataset):
 
         # Check whether additional output are requested
         out_lst = [x, bon, y_cor]
-        if self.teach:
-            out_lst.append(original_x)
         if self.return_cor:
             out_lst.append(cor)
         if self.return_path:
